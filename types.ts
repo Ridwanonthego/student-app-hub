@@ -14,8 +14,4 @@ export interface AppCardProps {
 
 export type Profile = Database['public']['Tables']['profiles']['Row'];
 
-export interface AppHubPreferences {
-    wallpaper?: string | null;
-    app_order?: string[] | null;
-    recently_used?: string[] | null;
-}
+export type AppHubPreferences = Database['public']['Tables']['app_hub_preferences']['Row'];

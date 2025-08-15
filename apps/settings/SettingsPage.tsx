@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { User } from '@supabase/supabase-js';
 import { supabase } from '../../supabase/client';
@@ -105,18 +106,18 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ user, onNavigateBack }) => 
             try {
                 // Fetch data from all three tables concurrently
                 const [profileRes, cvRes, nutriRes] = await Promise.all([
-                     supabase
-                        .from('profiles')
+                     (supabase
+                        .from('profiles') as any)
                         .select('full_name, username, gemini_api_key, avatar_url')
                         .eq('id', user.id)
                         .single(),
-                     supabase
-                        .from('cv_data')
+                     (supabase
+                        .from('cv_data') as any)
                         .select('linkedin_url, raw_info')
                         .eq('id', user.id)
                         .single(),
-                     supabase
-                        .from('banglanutri_profiles')
+                     (supabase
+                        .from('banglanutri_profiles') as any)
                         .select('age, height_cm, weight_kg')
                         .eq('id', user.id)
                         .single()

@@ -1,4 +1,5 @@
 
+
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import WatchFinderPage from './apps/movie-flix/MovieFlixPage';
 import AiHumanizerPage from './apps/ai-humanizer/AiHumanizerPage';
@@ -11,15 +12,95 @@ import GeminiBanglaPage from './apps/dhaka-gpt/DhakaGptPage';
 import SettingsPage from './apps/settings/SettingsPage';
 import TodoListPage from './apps/todo-list/TodoListPage';
 import { AppCardProps, Page, Profile, AppHubPreferences } from './types';
-import { MovieIcon, HumanizerIcon, CvIcon, NutritionIcon, StataIcon, ShikhokIcon, BrainCircuitIcon, MenuIcon, SpinnerIcon, EyeIcon, EyeOffIcon, GearIcon, ChatBubbleIcon, CloseIcon, TodoListIcon, ThemeIcon, HomeIcon, TherapyIcon, ExternalLinkIcon, UserIcon, CheckIcon, SparklesIcon } from './components/Icons';
+import { MovieIcon, HumanizerIcon, CvIcon, NutritionIcon, StataIcon, ShikhokIcon, BrainCircuitIcon, MenuIcon, SpinnerIcon, EyeIcon, EyeOffIcon, GearIcon, ChatBubbleIcon, CloseIcon, TodoListIcon, ThemeIcon, HomeIcon, TherapyIcon, ExternalLinkIcon, UserIcon, CheckIcon, SparklesIcon, PinIcon, PinSolidIcon, PhoneIcon, PhoneHangUpIcon } from './components/Icons';
 import { supabase } from './supabase/client';
-import { Session, User, PostgrestSingleResponse } from '@supabase/supabase-js';
+import { Session, User } from '@supabase/supabase-js';
 import { wallpapers } from './media/wallpapers';
 import { hoverSound, clickSound } from './media/sounds';
 import { Database } from './supabase/database.types';
 import MusicPlayer from './components/MusicPlayer';
 import { songList, Song } from './media/songs';
 import Chat from './apps/chat/Chat';
+import { ChatUser } from './apps/chat/types';
+
+// --- WebRTC Call Capsule Component ---
+const CallCapsule: React.FC<{
+    callState: any;
+    onAnswer: () => void;
+    onHangUp: () => void;
+    onDecline: () => void;
+}> = ({ callState, onAnswer, onHangUp, onDecline }) => {
+    const capsuleRef = useRef<HTMLDivElement>(null);
+    const [position, setPosition] = useState({ x: 20, y: 80 });
+    const isDragging = useRef(false);
+    const offset = useRef({ x: 0, y: 0 });
+
+    const onMouseDown = (e: React.MouseEvent) => {
+        if (!capsuleRef.current) return;
+        isDragging.current = true;
+        offset.current = {
+            x: e.clientX - capsuleRef.current.offsetLeft,
+            y: e.clientY - capsuleRef.current.offsetTop
+        };
+    };
+
+    const onMouseUp = () => {
+        isDragging.current = false;
+    };
+
+    const onMouseMove = (e: MouseEvent) => {
+        if (!isDragging.current || !capsuleRef.current) return;
+        e.preventDefault();
+        setPosition({
+            x: e.clientX - offset.current.x,
+            y: e.clientY - offset.current.y
+        });
+    };
+
+    useEffect(() => {
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
+        return () => {
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
+        };
+    }, []);
+
+    const getStatusInfo = () => {
+        switch (callState.status) {
+            case 'outgoing': return { color: 'bg-yellow-500', text: `Calling ${callState.peer?.username}...` };
+            case 'incoming': return { color: 'bg-yellow-500', text: `Incoming call from ${callState.peer?.username}` };
+            case 'connected': return { color: 'bg-green-500', text: `In call with ${callState.peer?.username}` };
+            case 'disconnected': return { color: 'bg-red-500', text: 'Call ended' };
+            default: return { color: 'bg-zinc-500', text: 'Idle' };
+        }
+    };
+    const { color, text } = getStatusInfo();
+
+    return (
+        <div
+            ref={capsuleRef}
+            style={{ top: `${position.y}px`, left: `${position.x}px` }}
+            className="fixed z-[100] bg-zinc-800/80 backdrop-blur-md border-2 border-zinc-600 rounded-full text-white shadow-2xl transition-all duration-300 cursor-grab active:cursor-grabbing"
+            onMouseDown={onMouseDown}
+        >
+            <div className="flex items-center gap-3 p-2">
+                <div className={`w-3 h-3 rounded-full ${color} transition-colors`}></div>
+                <span className="font-bold text-sm">{text}</span>
+                {callState.status === 'incoming' && (
+                    <>
+                        <button onClick={onAnswer} className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center hover:bg-green-600"><PhoneIcon className="w-5 h-5"/></button>
+                        <button onClick={onDecline} className="w-8 h-8 bg-red-500 rounded-full flex items-center justify-center hover:bg-red-600"><PhoneHangUpIcon className="w-5 h-5"/></button>
+                    </>
+                )}
+                 {(callState.status === 'outgoing' || callState.status === 'connected') && (
+                     <button onClick={onHangUp} className="w-8 h-8 bg-red-500 rounded-full flex items-center justify-center hover:bg-red-600"><PhoneHangUpIcon className="w-5 h-5"/></button>
+                 )}
+            </div>
+        </div>
+    );
+};
+
 
 const fictionalNames = [
   'Aragorn', 'BilboBaggins', 'Gandalf', 'Legolas', 'Gimli', 'FrodoBaggins', 'SamwiseGamgee',
@@ -57,8 +138,8 @@ const OnboardingForm: React.FC<{ user: User; onComplete: (updatedProfile: Profil
 
         try {
             // Check if username is unique
-            const { data: existingUser, error: checkError } = await supabase
-                .from('profiles')
+            const { data: existingUser, error: checkError } = await (supabase
+                .from('profiles') as any)
                 .select('username')
                 .eq('username', username)
                 .single();
@@ -70,8 +151,8 @@ const OnboardingForm: React.FC<{ user: User; onComplete: (updatedProfile: Profil
                 return;
             }
 
-            const { data, error: updateError } = await supabase
-                .from('profiles')
+            const { data, error: updateError } = await (supabase
+                .from('profiles') as any)
                 .update({
                     full_name: fullName,
                     username: username,
@@ -84,7 +165,7 @@ const OnboardingForm: React.FC<{ user: User; onComplete: (updatedProfile: Profil
             if (updateError) throw updateError;
             
             if (data) {
-                onComplete(data);
+                onComplete(data as Profile);
             }
         } catch (err: any) {
             setError(err.message);
@@ -163,27 +244,47 @@ const OnboardingForm: React.FC<{ user: User; onComplete: (updatedProfile: Profil
 };
 
 const initialApps: (Omit<AppCardProps, 'onSelect'> & { pageId: string; href?: string })[] = [
-    { title: "WatchFinder", pageId: 'watchfinder', description: "AI-powered movie & series recommendations.", icon: <MovieIcon />, hue: 180 },
+    { title: "WatchFinder", pageId: 'watchfinder', description: "I will help you find movies and help you escape the what to watch process", icon: <MovieIcon />, hue: 180 },
     { title: "AI Humanizer", pageId: 'ai-humanizer', description: "Make your AI-written text undetectable.", icon: <HumanizerIcon />, hue: 320 },
-    { title: "AI CV Architect", pageId: 'ai-cv-architect', description: "Build a professional CV from your raw info.", icon: <CvIcon />, hue: 260 },
+    { title: "Cv Expert", pageId: 'ai-cv-architect', description: "1 click cv from a Linkedin Link.", icon: <CvIcon />, hue: 260 },
     { title: "BanglaNutriPlan", pageId: 'bangla-nutri-plan', description: "Personalized Bangladeshi diet plans.", icon: <NutritionIcon />, hue: 30 },
     { title: "Stata Assistant", pageId: 'stata-assistant', description: "Debug & analyze Stata code with AI.", icon: <StataIcon />, hue: 300 },
-    { title: "Shikhok", pageId: 'shikhok', description: "Your AI research assistant for any topic.", icon: <ShikhokIcon />, hue: 50 },
+    { title: "শিক্ষক App", pageId: 'shikhok', description: "Teaches you whole curriculum through exciting podcasts from your College books", icon: <ShikhokIcon />, hue: 50 },
     { title: "Concept Clear", pageId: 'concept-clear', description: "Understand complex topics easily.", icon: <BrainCircuitIcon />, hue: 90 },
     { title: "Kajer List", pageId: 'todo-list', description: "An intelligent to-do list that understands you.", icon: <TodoListIcon/>, hue: 50 },
-    { title: "Thera.py", pageId: 'thera-py', href: "https://therapy-one-psi.vercel.app/", description: "Access external AI therapy service.", icon: <TherapyIcon />, hue: 200 },
+    { title: "Thera.py", pageId: 'thera-py', href: "https://therapy-one-psi.vercel.app/", description: "Confidential Ai Therapist. New login required.", icon: <TherapyIcon />, hue: 200 },
 ];
 
-const AppCard: React.FC<AppCardProps & { playHoverSound: () => void; playClickSound: () => void; isThemed: boolean }> = ({ title, description, icon, onSelect, hue, playHoverSound, playClickSound, isThemed }) => (
+const AppCard: React.FC<AppCardProps & { playHoverSound: () => void; playClickSound: () => void; isThemed: boolean; isPinned: boolean; onTogglePin: () => void; canPin: boolean; }> = ({ title, description, icon, onSelect, hue, playHoverSound, playClickSound, isThemed, isPinned, onTogglePin, canPin }) => (
   <div
     onClick={() => { playClickSound(); onSelect(); }}
     onMouseEnter={playHoverSound}
-    className={`p-4 rounded-lg transition-all duration-200 cursor-pointer flex flex-col h-full
+    className={`relative group p-4 rounded-lg transition-all duration-200 cursor-pointer flex flex-col h-full
       ${isThemed
         ? `bg-black/20 backdrop-blur-sm border-2 border-[hsl(${hue},_70%,_60%)] hover:bg-black/40 hover:shadow-[4px_4px_0px_0px_hsl(${hue},_70%,_60%)]`
         : `bg-zinc-800 border-2 border-[hsl(${hue},_70%,_60%)] hover:shadow-[6px_6px_0px_0px_hsl(${hue},_70%,_60%)] hover:-translate-x-0.5 hover:-translate-y-0.5`
       }`}
   >
+    <button
+        onClick={(e) => {
+            e.stopPropagation();
+            if (isPinned || canPin) {
+                playClickSound();
+                onTogglePin();
+            } else {
+                alert("You can only pin up to 2 apps.");
+            }
+        }}
+        className={`absolute top-2 right-2 p-1.5 rounded-full z-10 transition-all duration-200 
+            ${isPinned 
+                ? 'bg-lime-400/80 text-black' 
+                : 'bg-black/20 text-white/70 opacity-0 group-hover:opacity-100 hover:bg-black/50'}
+            ${!isPinned && !canPin ? 'cursor-not-allowed opacity-50' : ''}
+        `}
+        aria-label={isPinned ? "Unpin app" : "Pin app"}
+    >
+        {isPinned ? <PinSolidIcon className="w-5 h-5"/> : <PinIcon className="w-5 h-5"/>}
+    </button>
     <div className="flex items-center gap-3 mb-2">
       <div className={isThemed ? `text-[hsl(${hue},_70%,_60%)]` : `text-[hsl(${hue},_70%,_60%)]`}>{icon}</div>
       <h2 className={`text-xl font-bold text-white`}>{title}</h2>
@@ -260,12 +361,6 @@ const ThemeSwitcher: React.FC<{
 
 type AppDef = (Omit<AppCardProps, 'onSelect'> & { pageId: string; href?: string });
 
-type Prefs = {
-    wallpaper: string | null;
-    app_order: string[] | null;
-    recently_used: string[] | null;
-};
-
 const App: React.FC = () => {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -283,19 +378,19 @@ const App: React.FC = () => {
   const [currentWallpaperUrl, setCurrentWallpaperUrl] = useState(wallpapers[0]);
   const [apps, setApps] = useState<AppDef[]>(initialApps);
   const [recentlyUsed, setRecentlyUsed] = useState<string[]>([]);
+  const [pinnedApps, setPinnedApps] = useState<string[]>([]);
   const [showOnboarding, setShowOnboarding] = useState(false);
 
   const hoverAudioRef = useRef<HTMLAudioElement>(null);
   const clickAudioRef = useRef<HTMLAudioElement>(null);
   const wallpaperIntervalRef = useRef<number | null>(null);
   
-  // Drag and drop refs
   const dragItem = useRef<number | null>(null);
   const dragOverItem = useRef<number | null>(null);
 
   const playHoverSound = useCallback(() => {
     if (hoverAudioRef.current) {
-      hoverAudioRef.current.volume = 0.5; // Reduce volume by half
+      hoverAudioRef.current.volume = 0.25;
       hoverAudioRef.current.currentTime = 0;
       hoverAudioRef.current.play().catch(e => {});
     }
@@ -331,8 +426,8 @@ const App: React.FC = () => {
   useEffect(() => {
     const fetchProfileAndPrefs = async () => {
       if (session?.user) {
-        const { data, error }: PostgrestSingleResponse<Profile> = await supabase
-            .from('profiles')
+        const { data, error } = await (supabase
+            .from('profiles') as any)
             .select('*')
             .eq('id', session.user.id)
             .single();
@@ -340,29 +435,31 @@ const App: React.FC = () => {
         if (error && error.code !== 'PGRST116') {
             console.error('Error fetching profile:', error.message);
         } else {
-            setProfile(data);
-            if (data && (!data.full_name || !data.gemini_api_key || !data.username)) {
+            const typedData = data as Profile | null;
+            setProfile(typedData);
+            if (typedData && (!typedData.full_name || !typedData.gemini_api_key || !typedData.username)) {
                 setShowOnboarding(true);
             } else {
                 setShowOnboarding(false);
             }
         }
 
-        const { data: prefResult, error: prefError } = await supabase
-            .from('app_hub_preferences')
-            .select('wallpaper, app_order, recently_used')
+        const { data: prefResult, error: prefError } = await (supabase
+            .from('app_hub_preferences') as any)
+            .select('wallpaper, app_order, recently_used, pinned_apps')
             .eq('user_id', session.user.id)
             .single();
-
-        if (prefResult) {
-            const prefs = prefResult;
-            setWallpaper(prefs.wallpaper || 'random');
-            setRecentlyUsed(prefs.recently_used || []);
-            if (prefs.app_order) {
-                const orderedApps = prefs.app_order
+        
+        const typedPrefResult = prefResult as AppHubPreferences | null;
+        if (typedPrefResult) {
+            setWallpaper(typedPrefResult.wallpaper || 'random');
+            setRecentlyUsed(typedPrefResult.recently_used || []);
+            setPinnedApps(typedPrefResult.pinned_apps || []);
+            if (typedPrefResult.app_order) {
+                const orderedApps = typedPrefResult.app_order
                     .map((pageId: string) => initialApps.find(app => app.pageId === pageId))
                     .filter((app: AppDef | undefined): app is AppDef => !!app);
-                const remainingApps = initialApps.filter(app => !prefs.app_order.includes(app.pageId));
+                const remainingApps = initialApps.filter(app => !typedPrefResult.app_order.includes(app.pageId));
                 setApps([...orderedApps, ...remainingApps]);
             } else {
                 setApps(initialApps);
@@ -372,6 +469,7 @@ const App: React.FC = () => {
         } else {
             setWallpaper('random');
             setRecentlyUsed([]);
+            setPinnedApps([]);
             setApps(initialApps);
         }
       }
@@ -457,27 +555,54 @@ const App: React.FC = () => {
         setPage(pageId as Page);
     }
   };
+  
+  const unpinnedApps = apps.filter(app => !pinnedApps.includes(app.pageId));
 
   const handleDragEnd = async () => {
     if (dragItem.current === null || dragOverItem.current === null) return;
 
-    const newAppOrder = [...apps];
-    const draggedItemContent = newAppOrder.splice(dragItem.current, 1)[0];
-    newAppOrder.splice(dragOverItem.current, 0, draggedItemContent);
+    const newUnpinnedAppOrder = [...unpinnedApps];
+    const draggedItemContent = newUnpinnedAppOrder.splice(dragItem.current, 1)[0];
+    newUnpinnedAppOrder.splice(dragOverItem.current, 0, draggedItemContent);
     
     dragItem.current = null;
     dragOverItem.current = null;
 
-    setApps(newAppOrder);
+    const finalFullOrder = [...apps.filter(a => pinnedApps.includes(a.pageId)), ...newUnpinnedAppOrder];
+    setApps(finalFullOrder);
 
     if (session?.user) {
-        const newOrderIds = newAppOrder.map(app => app.pageId);
+        const newOrderIds = finalFullOrder.map(app => app.pageId);
         await (supabase.from('app_hub_preferences') as any).upsert({
             user_id: session.user.id,
             app_order: newOrderIds,
         }, { onConflict: 'user_id' });
     }
   };
+  
+  const handleTogglePin = async (pageId: string) => {
+    const isCurrentlyPinned = pinnedApps.includes(pageId);
+    let newPinnedApps: string[];
+
+    if (isCurrentlyPinned) {
+        newPinnedApps = pinnedApps.filter(id => id !== pageId);
+    } else {
+        if (pinnedApps.length >= 2) {
+            alert("You can only pin a maximum of 2 apps.");
+            return;
+        }
+        newPinnedApps = [...pinnedApps, pageId];
+    }
+
+    setPinnedApps(newPinnedApps);
+
+    if (session?.user) {
+        await (supabase.from('app_hub_preferences') as any).upsert({
+            user_id: session.user.id,
+            pinned_apps: newPinnedApps,
+        }, { onConflict: 'user_id' });
+    }
+};
 
   const geminiApiKey = profile?.gemini_api_key || (process.env.API_KEY as string);
   const isThemed = wallpaper !== 'default';
@@ -610,6 +735,159 @@ const App: React.FC = () => {
             setProgress(parseFloat(e.target.value));
         }
     };
+    
+    // --- WebRTC Call State & Logic ---
+    const [callState, setCallState] = useState<{
+        status: 'idle' | 'outgoing' | 'incoming' | 'connected' | 'disconnected';
+        peer: ChatUser | null;
+        localStream: MediaStream | null;
+    }>({ status: 'idle', peer: null, localStream: null });
+    const peerConnection = useRef<RTCPeerConnection | null>(null);
+    const remoteAudioRef = useRef<HTMLAudioElement>(null);
+    
+    const sendSignal = async (receiverId: string, type: string, payload: any) => {
+        await (supabase.from('webrtc_signals') as any).insert({
+            sender_id: session!.user.id,
+            receiver_id: receiverId,
+            signal_type: type,
+            payload: payload
+        });
+    };
+    
+    const cleanupCall = useCallback(() => {
+        if (peerConnection.current) {
+            peerConnection.current.close();
+            peerConnection.current = null;
+        }
+        if (callState.localStream) {
+            callState.localStream.getTracks().forEach(track => track.stop());
+        }
+        setCallState({ status: 'disconnected', peer: callState.peer, localStream: null });
+        setTimeout(() => setCallState({ status: 'idle', peer: null, localStream: null }), 2000);
+    }, [callState.localStream, callState.peer]);
+
+
+    const initiateCall = async (peer: ChatUser) => {
+        if (callState.status !== 'idle') return;
+
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            setCallState({ status: 'outgoing', peer, localStream: stream });
+
+            const pc = new RTCPeerConnection();
+            peerConnection.current = pc;
+            
+            stream.getTracks().forEach(track => pc.addTrack(track, stream));
+
+            pc.onicecandidate = event => {
+                if (event.candidate) {
+                    sendSignal(peer.id, 'ice-candidate', { candidate: event.candidate });
+                }
+            };
+            
+            pc.ontrack = event => {
+                if (remoteAudioRef.current) {
+                    remoteAudioRef.current.srcObject = event.streams[0];
+                }
+            };
+
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            
+            sendSignal(peer.id, 'offer', { offer });
+            
+        } catch (error) {
+            console.error("Error initiating call:", error);
+            cleanupCall();
+        }
+    };
+
+    const answerCall = async () => {
+        if (callState.status !== 'incoming' || !peerConnection.current) return;
+
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            setCallState(prev => ({ ...prev, status: 'connected', localStream: stream }));
+
+            stream.getTracks().forEach(track => peerConnection.current!.addTrack(track, stream));
+
+            const answer = await peerConnection.current.createAnswer();
+            await peerConnection.current.setLocalDescription(answer);
+
+            sendSignal(callState.peer!.id, 'answer', { answer });
+        } catch (error) {
+             console.error("Error answering call:", error);
+            cleanupCall();
+        }
+    };
+
+    const hangUp = () => {
+        if (callState.peer) {
+            sendSignal(callState.peer.id, 'hang-up', {});
+        }
+        cleanupCall();
+    };
+
+    const handleSignal = useCallback(async (payload: any) => {
+        const signal = payload.new;
+        if (!session?.user || signal.sender_id === session.user.id) return;
+        
+        const pc = peerConnection.current;
+
+        switch (signal.signal_type) {
+            case 'offer':
+                const { data: callerProfile } = await (supabase.from('profiles') as any).select('id, username, full_name, avatar_url').eq('id', signal.sender_id).single();
+                if (!callerProfile) return;
+
+                const newPc = new RTCPeerConnection();
+                peerConnection.current = newPc;
+                
+                newPc.onicecandidate = event => {
+                    if (event.candidate) {
+                        sendSignal(signal.sender_id, 'ice-candidate', { candidate: event.candidate });
+                    }
+                };
+                 newPc.ontrack = event => {
+                    if (remoteAudioRef.current) {
+                        remoteAudioRef.current.srcObject = event.streams[0];
+                    }
+                };
+
+                await newPc.setRemoteDescription(new RTCSessionDescription(signal.payload.offer));
+                setCallState({ status: 'incoming', peer: callerProfile as ChatUser, localStream: null });
+                break;
+            
+            case 'answer':
+                if (pc) await pc.setRemoteDescription(new RTCSessionDescription(signal.payload.answer));
+                setCallState(prev => ({...prev, status: 'connected' }));
+                break;
+            
+            case 'ice-candidate':
+                if (pc) await pc.addIceCandidate(new RTCIceCandidate(signal.payload.candidate));
+                break;
+            
+            case 'hang-up':
+                cleanupCall();
+                break;
+        }
+    }, [session?.user, cleanupCall]);
+
+    useEffect(() => {
+        if (!session?.user?.id) return;
+
+        const channel = supabase.channel('webrtc_signals')
+            .on('postgres_changes', {
+                event: 'INSERT',
+                schema: 'public',
+                table: 'webrtc_signals',
+                filter: `receiver_id=eq.${session.user.id}`
+            }, handleSignal)
+            .subscribe();
+            
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, [session?.user?.id, handleSignal]);
 
 
   const renderPage = () => {
@@ -736,6 +1014,12 @@ const App: React.FC = () => {
   const recentAppObjects = recentlyUsed
       .map(pageId => initialApps.find(app => app.pageId === pageId))
       .filter((app): app is AppDef => !!app);
+      
+  const pinnedAppObjects = pinnedApps
+      .map(pageId => initialApps.find(app => app.pageId === pageId))
+      .filter((app): app is AppDef => !!app);
+  
+  const canPinMore = pinnedApps.length < 2;
   
   const imageGenLinks = [
     { href: 'https://huggingface.co/spaces/black-forest-labs/FLUX.1-dev', title: 'High quality', description: 'FLUX.1-dev' },
@@ -801,8 +1085,18 @@ const App: React.FC = () => {
            </div>
        )}
 
-       <Chat user={session.user} profile={profile!} />
+       <Chat user={session.user} profile={profile!} initiateCall={initiateCall}/>
        
+       {callState.status !== 'idle' && (
+           <CallCapsule
+               callState={callState}
+               onAnswer={answerCall}
+               onHangUp={hangUp}
+               onDecline={hangUp}
+           />
+       )}
+       <audio ref={remoteAudioRef} autoPlay />
+
        <div
          className="min-h-screen bg-cover bg-center bg-fixed transition-all duration-500"
          style={{
@@ -813,33 +1107,58 @@ const App: React.FC = () => {
          <div className={`min-h-screen transition-colors duration-500 ${isThemed ? 'bg-black/50' : ''}`}>
            {page === 'hub' ? (
              <div className={`container mx-auto px-4 py-8 transition-all duration-300 ease-in-out ${isPlayerExpanded ? 'pl-72' : 'pl-24'}`}>
-               <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
-                  <div className="flex items-center gap-4 order-2 sm:order-1">
-                    <div className="w-14 h-14 rounded-full border-2 border-lime-400 bg-zinc-800 flex items-center justify-center flex-shrink-0">
-                        {profile?.avatar_url ? (
-                            <img src={profile.avatar_url} alt="User Avatar" className="w-full h-full rounded-full object-cover" />
-                        ) : (
-                            <UserIcon className="w-8 h-8 text-lime-400" />
-                        )}
-                    </div>
-                   <div>
-                      <h1 className="text-3xl font-bold text-white">Welcome, {profile?.full_name || profile?.username || "User"}!</h1>
-                      <p className="text-zinc-400">What will you create today?</p>
-                   </div>
+               <header className="flex flex-col sm:flex-row sm:justify-between items-center mb-8 gap-4">
+                  {/* Welcome Group */}
+                  <div className="w-full sm:w-auto flex items-center gap-4 order-1 sm:order-none">
+                      <div className="w-14 h-14 rounded-full border-2 border-lime-400 bg-zinc-800 flex items-center justify-center flex-shrink-0">
+                          {profile?.avatar_url ? (
+                              <img src={profile.avatar_url} alt="User Avatar" className="w-full h-full rounded-full object-cover" />
+                          ) : (
+                              <UserIcon className="w-8 h-8 text-lime-400" />
+                          )}
+                      </div>
+                     <div>
+                        <h1 className="text-3xl font-bold text-white">Welcome, {profile?.full_name?.split(' ')[0] || profile?.username || "User"}!</h1>
+                        <p className="text-zinc-400">What will you create today?</p>
+                     </div>
                   </div>
-                 <div className="flex items-center gap-2 sm:gap-4 self-end sm:self-center order-1 sm:order-2">
-                    <button
-                        onClick={() => { playClickSound(); setPage('gemini-bangla'); }}
-                        onMouseEnter={playHoverSound}
-                        className="px-4 py-2 bg-zinc-800/50 border-2 border-lime-400 rounded-lg hover:bg-zinc-700/70 transition-colors shadow-lg backdrop-blur-sm flex items-center gap-2 text-white font-bold"
-                    >
-                        <ChatBubbleIcon className="w-6 h-6 text-lime-400" />
-                        Gemini Bangla
-                    </button>
-                   <button onClick={() => { playClickSound(); setPage('settings'); }} onMouseEnter={playHoverSound} className="p-3 bg-zinc-800/50 border-2 border-lime-400 rounded-full hover:bg-zinc-700/70 transition-colors shadow-lg backdrop-blur-sm"><GearIcon className="w-6 h-6 text-lime-400" /></button>
-                   <ThemeSwitcher current={wallpaper} onChange={handleWallpaperChange} playHoverSound={playHoverSound} playClickSound={playClickSound} />
-                 </div>
+                  {/* Controls Group */}
+                  <div className="w-full sm:w-auto flex justify-end order-2 sm:order-none">
+                      <div className="flex items-center gap-2 sm:gap-4">
+                           <button
+                              onClick={() => { playClickSound(); setPage('gemini-bangla'); }}
+                              onMouseEnter={playHoverSound}
+                              className="px-4 py-2 bg-zinc-800/50 border-2 border-lime-400 rounded-lg hover:bg-zinc-700/70 transition-colors shadow-lg backdrop-blur-sm flex items-center gap-2 text-white font-bold"
+                          >
+                              <ChatBubbleIcon className="w-6 h-6 text-lime-400" />
+                              <span className="hidden sm:inline">Gemini Bangla</span>
+                          </button>
+                         <button onClick={() => { playClickSound(); setPage('settings'); }} onMouseEnter={playHoverSound} className="p-3 bg-zinc-800/50 border-2 border-lime-400 rounded-full hover:bg-zinc-700/70 transition-colors shadow-lg backdrop-blur-sm" aria-label="Settings"><GearIcon className="w-6 h-6 text-lime-400" /></button>
+                         <ThemeSwitcher current={wallpaper} onChange={handleWallpaperChange} playHoverSound={playHoverSound} playClickSound={playClickSound} />
+                      </div>
+                  </div>
                </header>
+                
+                {pinnedAppObjects.length > 0 && (
+                  <div className="mb-12">
+                      <h2 className="text-2xl font-bold text-white mb-4">Pinned Apps</h2>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                          {pinnedAppObjects.map(app => (
+                              <AppCard
+                                  key={`pinned-${app.pageId}`}
+                                  {...app}
+                                  onSelect={() => handleAppSelect(app.pageId)}
+                                  playHoverSound={playHoverSound}
+                                  playClickSound={playClickSound}
+                                  isThemed={isThemed}
+                                  isPinned={true}
+                                  onTogglePin={() => handleTogglePin(app.pageId)}
+                                  canPin={canPinMore}
+                              />
+                          ))}
+                      </div>
+                  </div>
+                )}
                 
                 {recentAppObjects.length > 0 && (
                   <div className="mb-12">
@@ -853,6 +1172,9 @@ const App: React.FC = () => {
                                   playHoverSound={playHoverSound}
                                   playClickSound={playClickSound}
                                   isThemed={isThemed}
+                                  isPinned={pinnedApps.includes(app.pageId)}
+                                  onTogglePin={() => handleTogglePin(app.pageId)}
+                                  canPin={canPinMore}
                               />
                           ))}
                       </div>
@@ -861,7 +1183,7 @@ const App: React.FC = () => {
                 
                 <h2 className="text-2xl font-bold text-white mb-4">All Apps</h2>
                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                 {apps.map((app, index) => (
+                 {unpinnedApps.map((app, index) => (
                    <div
                     key={app.pageId}
                     draggable
@@ -877,6 +1199,9 @@ const App: React.FC = () => {
                        playHoverSound={playHoverSound}
                        playClickSound={playClickSound}
                        isThemed={isThemed}
+                       isPinned={false}
+                       onTogglePin={() => handleTogglePin(app.pageId)}
+                       canPin={canPinMore}
                      />
                    </div>
                  ))}

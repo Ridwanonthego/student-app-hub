@@ -447,3 +447,28 @@ export const UsersIcon: React.FC<{ className?: string }> = ({ className }) => (
         <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm6-11a4 4 0 11-8 0 4 4 0 018 0z" />
     </svg>
 );
+
+export const PinIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 ${className || ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M16 3v5.293a1 1 0 01-.293.707L12 12.414l-3.707-3.414A1 1 0 018 8.293V3m8 0a2 2 0 00-2-2H8a2 2 0 00-2 2v5.293a1 1 0 01-.293.707l-2.414 2.414a1 1 0 000 1.414l5.414 5.414a1 1 0 00.707.293h.01a1 1 0 00.707-.293l5.414-5.414a1 1 0 000-1.414l-2.414-2.414A1 1 0 0116 8.293V3z" />
+  </svg>
+);
+
+export const PinSolidIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 ${className || ''}`} viewBox="0 0 20 20" fill="currentColor">
+    <path d="M9 2a1 1 0 011 1v4.586l1.707 1.707a1 1 0 010 1.414l-4.586 4.586a1 1 0 01-1.414 0l-4.586-4.586a1 1 0 010-1.414L7 7.586V3a1 1 0 011-1h1z" />
+    <path d="M4 14v2a1 1 0 001 1h10a1 1 0 001-1v-2h-2v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-1H4z" />
+  </svg>
+);
+
+export const PhoneIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 ${className || ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+  </svg>
+);
+
+export const PhoneHangUpIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 ${className || ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} transform="rotate(135)">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+  </svg>
+);

@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ChatMessage, ChatPart, GeminiBanglaPageProps } from './types';
 import { createGeminiBanglaChat, sendGeminiBanglaChatMessage } from './gemini-service';
 import { ChatBubble, ChatInput } from './components';
-import { BackArrowIcon, SpinnerIcon } from '../../components/Icons';
+import { BackArrowIcon, SpinnerIcon, TrashIcon } from '../../components/Icons';
 import { supabase } from '../../supabase/client';
 import { Chat } from '@google/genai';
 import { User } from '@supabase/supabase-js';
@@ -129,23 +129,75 @@ const GeminiBanglaPage: React.FC<GeminiBanglaPageProps> = ({ onNavigateBack, api
         }
     };
 
+    const handleResetChat = async () => {
+        if (isLoading) return;
+        setIsLoading(true);
+        try {
+            // 1. Delete history from Supabase
+            await supabase
+                .from('gemini_bangla_chat_history')
+                .delete()
+                .eq('user_id', user.id);
+
+            // 2. Re-fetch context to create a fresh chat instance
+            const [
+                profileRes, cvRes, watchfinderRes, nutriRes, todoRes
+            ] = await Promise.all([
+                (supabase.from('profiles') as any).select('full_name, username').eq('id', user.id).single(),
+                (supabase.from('cv_data') as any).select('raw_info').eq('id', user.id).maybeSingle(),
+                (supabase.from('watchfinder_profiles') as any).select('favorite_genres, favorite_actors, preferred_description').eq('id', user.id).maybeSingle(),
+                (supabase.from('banglanutri_profiles') as any).select('goal, exclusions').eq('id', user.id).maybeSingle(),
+                (supabase.from('todo_tasks') as any).select('title, status').eq('user_id', user.id).limit(5).order('created_at', { ascending: false })
+            ]);
+
+            let userContext = "";
+            const profileData = profileRes.data as any;
+            if (profileData) userContext += `User's Name: ${profileData.full_name || profileData.username}. `;
+            const cvData = cvRes.data as any;
+            if (cvData && cvData.raw_info) userContext += `Professional Summary: ${cvData.raw_info.substring(0, 150)}... `;
+            const watchfinderData = watchfinderRes.data as any;
+            if (watchfinderData) userContext += `Movie Tastes: Likes genres like ${watchfinderData.favorite_genres?.join(', ')}. `;
+            const nutriData = nutriRes.data as any;
+            if (nutriData) userContext += `Health Goal: To ${nutriData.goal} weight. They don't eat: ${nutriData.exclusions?.join(', ')}. `;
+            const todoData = todoRes.data as any[];
+            if (todoData && todoData.length > 0) userContext += `Recent Tasks: ${todoData.map(t => `${t.title}`).join(', ')}. `;
+
+            // 3. Re-initialize chat with empty history
+            chatRef.current = createGeminiBanglaChat(apiKey, [], userContext.trim());
+
+            // 4. Reset UI
+            setMessages([{ role: 'model', parts: [{ text: "আপনার চ্যাট ইতিহাস মুছে ফেলা হয়েছে। আবার শুরু করা যাক!" }] }]);
+        } catch (err) {
+            console.error("Failed to reset chat:", err);
+            setMessages(prev => [...prev, { role: 'model', parts: [{ text: "চ্যাট ইতিহাস মুছতে একটি সমস্যা হয়েছে।" }] }]);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+
     return (
         <div className="container mx-auto p-4 sm:p-8">
             <div className="w-full max-w-5xl mx-auto h-[calc(100vh-150px)] max-h-[900px] flex flex-col bg-black/20 backdrop-blur-sm border-2 border-zinc-700 rounded-2xl shadow-2xl overflow-hidden font-poppins text-white">
-                <header className="flex-shrink-0 bg-zinc-800/80 p-4 flex items-center gap-4 border-b-2 border-teal-500/50">
-                    <button onClick={onNavigateBack} className="p-2 hover:bg-zinc-700 rounded-full">
-                        <BackArrowIcon />
-                    </button>
-                    <div className="relative">
-                        <div className="w-10 h-10 rounded-lg bg-teal-500 flex items-center justify-center font-bold border-2 border-teal-300">
-                            GB
+                <header className="flex-shrink-0 bg-zinc-800/80 p-4 flex items-center justify-between gap-4 border-b-2 border-teal-500/50">
+                    <div className="flex items-center gap-4">
+                        <button onClick={onNavigateBack} className="p-2 hover:bg-zinc-700 rounded-full">
+                            <BackArrowIcon />
+                        </button>
+                        <div className="relative">
+                            <div className="w-10 h-10 rounded-lg bg-teal-500 flex items-center justify-center font-bold border-2 border-teal-300">
+                                GB
+                            </div>
+                            <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-lime-400 rounded-full border-2 border-zinc-800"></div>
                         </div>
-                        <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-lime-400 rounded-full border-2 border-zinc-800"></div>
+                        <div>
+                            <h1 className="text-2xl font-bold text-white">Gemini Bangla</h1>
+                            <p className="text-sm text-zinc-400 font-semibold">আপনার বাংলা AI সহকারী</p>
+                        </div>
                     </div>
-                    <div>
-                        <h1 className="text-2xl font-bold text-white">Gemini Bangla</h1>
-                        <p className="text-sm text-zinc-400 font-semibold">আপনার বাংলা AI সহকারী</p>
-                    </div>
+                    <button onClick={handleResetChat} disabled={isLoading} className="p-2 text-zinc-400 rounded-full hover:bg-zinc-700 hover:text-red-500 disabled:text-zinc-600 disabled:cursor-not-allowed" aria-label="Reset Chat">
+                        <TrashIcon className="w-6 h-6" />
+                    </button>
                 </header>
                 <main className="flex-1 flex flex-col min-h-0">
                     <div className="flex-1 p-4 sm:p-6 space-y-6 overflow-y-auto">

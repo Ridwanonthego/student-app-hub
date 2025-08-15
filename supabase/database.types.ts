@@ -1,3 +1,4 @@
+
 export type Json =
   | string
   | number
@@ -6,15 +7,16 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[]
 
-export interface Database {
+export type Database = {
   public: {
     Tables: {
       app_hub_preferences: {
         Row: {
           user_id: string
-          app_order: string[] | null
-          recently_used: string[] | null
-          wallpaper: string | null
+          app_order: string[]
+          recently_used: string[]
+          wallpaper: string
+          pinned_apps: string[]
           updated_at: string | null
         }
         Insert: {
@@ -22,6 +24,7 @@ export interface Database {
           app_order?: string[] | null
           recently_used?: string[] | null
           wallpaper?: string | null
+          pinned_apps?: string[] | null
           updated_at?: string | null
         }
         Update: {
@@ -29,6 +32,7 @@ export interface Database {
           app_order?: string[] | null
           recently_used?: string[] | null
           wallpaper?: string | null
+          pinned_apps?: string[] | null
           updated_at?: string | null
         }
         Relationships: [
@@ -119,21 +123,27 @@ export interface Database {
           id: number
           sender_id: string
           receiver_id: string
-          content: string
+          content: string | null
+          message_type: string
+          payload: Json | null
           created_at: string
         }
         Insert: {
           id?: number
           sender_id: string
           receiver_id: string
-          content: string
+          content?: string | null
+          message_type?: string
+          payload?: Json | null
           created_at?: string
         }
         Update: {
           id?: number
           sender_id?: string
           receiver_id?: string
-          content?: string
+          content?: string | null
+          message_type?: string
+          payload?: Json | null
           created_at?: string
         }
         Relationships: [
@@ -223,12 +233,12 @@ export interface Database {
       profiles: {
         Row: {
           avatar_url: string | null
-          full_name: string | null
-          gemini_api_key: string | null
+          full_name: string
+          gemini_api_key: string
           hugging_face_key: string | null
           id: string
           updated_at: string | null
-          username: string | null
+          username: string
           website: string | null
         }
         Insert: {
@@ -399,6 +409,48 @@ export interface Database {
           {
             foreignKeyName: "watchfinder_ratings_user_id_fkey"
             columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      webrtc_signals: {
+        Row: {
+          id: number
+          sender_id: string
+          receiver_id: string
+          signal_type: string
+          payload: Json
+          created_at: string
+        }
+        Insert: {
+          id?: number
+          sender_id: string
+          receiver_id: string
+          signal_type: string
+          payload: Json
+          created_at?: string
+        }
+        Update: {
+          id?: number
+          sender_id?: string
+          receiver_id?: string
+          signal_type?: string
+          payload?: Json
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "webrtc_signals_receiver_id_fkey"
+            columns: ["receiver_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "webrtc_signals_sender_id_fkey"
+            columns: ["sender_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]

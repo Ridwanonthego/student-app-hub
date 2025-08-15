@@ -1,11 +1,48 @@
 
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../../supabase/client';
 import { ChatProps, ChatUser, ChatMessage } from './types';
-import { SpinnerIcon, MessageSquareIcon, UsersIcon, CloseIcon, MaximizeIcon, MinimizeIcon, SendIcon, UserIcon } from '../../components/Icons';
+import { SpinnerIcon, MessageSquareIcon, UsersIcon, CloseIcon, MaximizeIcon, MinimizeIcon, SendIcon, UserIcon, PhoneIcon } from '../../components/Icons';
 import { RealtimeChannel, User } from '@supabase/supabase-js';
 
-const Chat: React.FC<ChatProps> = ({ user, profile }) => {
+const TMDB_IMAGE_URL = 'https://image.tmdb.org/t/p/w500';
+
+const WatchInviteBubble: React.FC<{ message: ChatMessage; currentUserId: string; onAccept: (message: ChatMessage) => void }> = ({ message, currentUserId, onAccept }) => {
+    const payload = message.payload as any;
+    if (!payload || !payload.movie) return null;
+
+    const { movie, status } = payload;
+    const isReceiver = message.receiver_id === currentUserId;
+
+    return (
+        <div className="p-3 bg-zinc-700 rounded-lg max-w-xs md:max-w-md border-2 border-zinc-600">
+            <p className="text-sm text-zinc-300 mb-2">{message.content}</p>
+            <div className="flex gap-3 bg-zinc-800 p-2 rounded-md">
+                <img src={`${TMDB_IMAGE_URL}${movie.poster_path}`} alt={movie.title} className="w-16 h-24 rounded-md object-cover" />
+                <div>
+                    <p className="font-bold text-white">{movie.title}</p>
+                    {isReceiver ? (
+                        status === 'pending' ? (
+                            <button onClick={() => onAccept(message)} className="mt-2 bg-lime-500 text-black font-bold text-xs px-3 py-1 rounded-md hover:bg-lime-600">
+                                Accept
+                            </button>
+                        ) : (
+                            <p className="mt-2 text-green-400 font-bold text-sm">You accepted!</p>
+                        )
+                    ) : (
+                         <p className={`mt-2 font-bold text-sm ${status === 'pending' ? 'text-yellow-400' : 'text-green-400'}`}>
+                            {status === 'pending' ? 'Pending...' : 'Accepted!'}
+                        </p>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+
+const Chat: React.FC<ChatProps> = ({ user, profile, initiateCall }) => {
     const [view, setView] = useState<'collapsed' | 'expanded' | 'fullscreen'>('collapsed');
     const [allUsers, setAllUsers] = useState<ChatUser[]>([]);
     const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
@@ -17,7 +54,6 @@ const Chat: React.FC<ChatProps> = ({ user, profile }) => {
     const presenceChannel = useRef<RealtimeChannel | null>(null);
     const messagesChannel = useRef<RealtimeChannel | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
-    const notificationSoundRef = useRef<HTMLAudioElement>(null);
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -26,8 +62,8 @@ const Chat: React.FC<ChatProps> = ({ user, profile }) => {
     const fetchUsers = useCallback(async () => {
         setLoading(prev => ({ ...prev, users: true }));
         try {
-            const { data, error } = await supabase
-                .from('profiles')
+            const { data, error } = await (supabase
+                .from('profiles') as any)
                 .select('id, username, full_name, avatar_url')
                 .neq('id', user.id);
             if (error) throw error;
@@ -82,8 +118,8 @@ const Chat: React.FC<ChatProps> = ({ user, profile }) => {
     const fetchMessages = useCallback(async (peerId: string) => {
         setLoading(prev => ({ ...prev, messages: true }));
         try {
-            const { data, error } = await supabase
-                .from('chat_messages')
+            const { data, error } = await (supabase
+                .from('chat_messages') as any)
                 .select('*')
                 .or(`and(sender_id.eq.${user.id},receiver_id.eq.${peerId}),and(sender_id.eq.${peerId},receiver_id.eq.${user.id})`)
                 .order('created_at', { ascending: true });
@@ -108,28 +144,36 @@ const Chat: React.FC<ChatProps> = ({ user, profile }) => {
     useEffect(() => {
         if (!user.id) return;
 
-        const handleNewMessage = (payload: any) => {
-            const newMessage = payload.new as ChatMessage;
+        const handleDbChange = (payload: any) => {
+            const changedMessage = payload.new as ChatMessage;
 
-            notificationSoundRef.current?.play().catch(e => console.log("Audio play failed", e));
-            
-            // If this message is for the currently open chat, add it to the view
-            if (view !== 'collapsed' && selectedUser?.id === newMessage.sender_id) {
-                setMessages(prev => [...prev, newMessage]);
+            if (payload.eventType === 'INSERT') {
+                 // Play notification sound
+                const notificationSound = new Audio('https://res.cloudinary.com/dy80ftu9k/video/upload/v1755274938/Copy_of_Friday_at_10-19_PM_mx9m95.mp4');
+                notificationSound.volume = 1.0;
+                notificationSound.play().catch(e => console.error("Audio play failed", e));
+            }
+           
+            if (selectedUser && (changedMessage.sender_id === selectedUser.id || changedMessage.receiver_id === selectedUser.id)) {
+                 if(payload.eventType === 'INSERT') {
+                    setMessages(prev => [...prev, changedMessage]);
+                 } else if (payload.eventType === 'UPDATE') {
+                    setMessages(prev => prev.map(m => m.id === changedMessage.id ? changedMessage : m));
+                 }
             } else {
-                // Otherwise, it's an unread message from someone else (or chat is collapsed/unfocused)
-                setUnreadSenders(prev => new Set(prev).add(newMessage.sender_id));
+                if(payload.eventType === 'INSERT' && changedMessage.receiver_id === user.id) {
+                    setUnreadSenders(prev => new Set(prev).add(changedMessage.sender_id));
+                }
             }
         };
 
         const channel = supabase
-            .channel(`public:chat_messages:receiver_id=eq.${user.id}`)
+            .channel(`public:chat_messages`)
             .on('postgres_changes', {
-                event: 'INSERT',
+                event: '*',
                 schema: 'public',
                 table: 'chat_messages',
-                filter: `receiver_id=eq.${user.id}`,
-            }, handleNewMessage)
+            }, handleDbChange)
             .subscribe();
 
         messagesChannel.current = channel;
@@ -151,6 +195,8 @@ const Chat: React.FC<ChatProps> = ({ user, profile }) => {
             sender_id: user.id,
             receiver_id: selectedUser.id,
             content,
+            message_type: 'text',
+            payload: null,
             created_at: new Date().toISOString(),
             sender: { ...profile, id: user.id } as any,
         }
@@ -167,6 +213,25 @@ const Chat: React.FC<ChatProps> = ({ user, profile }) => {
             // Optionally remove optimistic message on error
             setMessages(prev => prev.filter(m => m.id !== optimisticMessage.id));
         }
+    };
+    
+    const handleAcceptInvite = async (inviteMessage: ChatMessage) => {
+        const payload = inviteMessage.payload as any;
+        if (!payload || !payload.movie) return;
+
+        // 1. Update original message to 'accepted'
+        await (supabase
+            .from('chat_messages') as any)
+            .update({ payload: { ...payload, status: 'accepted' } })
+            .eq('id', inviteMessage.id);
+        
+        // 2. Send confirmation message back
+        await (supabase.from('chat_messages') as any).insert({
+            sender_id: user.id,
+            receiver_id: inviteMessage.sender_id,
+            message_type: 'watch-accept',
+            content: `Sounds great! I'd love to watch "${payload.movie.title}" with you.`
+        });
     };
 
     const handleSelectUser = (userToSelect: ChatUser) => {
@@ -202,13 +267,12 @@ const Chat: React.FC<ChatProps> = ({ user, profile }) => {
     const combinedUsers = allUsers.map(u => ({ ...u, is_online: onlineUsers.includes(u.id) })).sort((a,b) => (b.is_online ? 1 : -1) - (a.is_online ? 1 : -1) || (a.username || '').localeCompare(b.username || ''));
 
     const viewClasses = {
-        expanded: 'fixed bottom-5 right-5 w-[90vw] max-w-2xl h-[70vh] max-h-[600px] rounded-lg',
+        expanded: 'fixed inset-0 w-full h-full rounded-none sm:inset-auto sm:bottom-5 sm:right-5 sm:w-[90vw] sm:max-w-2xl sm:h-[70vh] sm:max-h-[600px] sm:rounded-lg',
         fullscreen: 'fixed inset-0 w-full h-full rounded-none'
     }
 
     return (
         <div className={`${viewClasses[view]} bg-zinc-800 border-2 border-zinc-600 shadow-2xl flex flex-col font-poppins text-white z-50`}>
-            <audio ref={notificationSoundRef} src="https://res.cloudinary.com/dy80ftu9k/video/upload/v1755274938/Copy_of_Friday_at_10-19_PM_mx9m95.mp4" preload="auto"></audio>
             <header className="flex-shrink-0 bg-zinc-900 p-3 flex justify-between items-center border-b-2 border-zinc-700">
                 <div className="flex items-center gap-2">
                     {selectedUser ? (
@@ -225,6 +289,11 @@ const Chat: React.FC<ChatProps> = ({ user, profile }) => {
                     )}
                 </div>
                  <div className="flex items-center gap-2">
+                    {selectedUser && (
+                        <button onClick={() => initiateCall(selectedUser)} className="p-1.5 hover:bg-zinc-700 rounded-full text-lime-400" aria-label={`Call ${selectedUser.username}`}>
+                            <PhoneIcon className="w-5 h-5"/>
+                        </button>
+                    )}
                     <button onClick={() => setView(view === 'expanded' ? 'fullscreen' : 'expanded')} className="p-1 hover:bg-zinc-700 rounded-full">{view === 'expanded' ? <MaximizeIcon /> : <MinimizeIcon />}</button>
                     <button onClick={() => setView('collapsed')} className="p-1 hover:bg-zinc-700 rounded-full"><CloseIcon /></button>
                 </div>
@@ -253,9 +322,19 @@ const Chat: React.FC<ChatProps> = ({ user, profile }) => {
                             <div className="flex-1 p-4 space-y-4 overflow-y-auto">
                                 {loading.messages ? <SpinnerIcon className="m-auto text-lime-400"/> : messages.map(msg => (
                                     <div key={msg.id} className={`flex items-end gap-2 ${msg.sender_id === user.id ? 'justify-end' : ''}`}>
-                                        <div className={`max-w-xs md:max-w-md p-3 rounded-lg ${msg.sender_id === user.id ? 'bg-lime-500 text-black' : 'bg-zinc-700 text-white'}`}>
-                                            <p className="whitespace-pre-wrap text-sm">{msg.content}</p>
-                                        </div>
+                                        {msg.message_type === 'text' && (
+                                            <div className={`max-w-xs md:max-w-md p-3 rounded-lg ${msg.sender_id === user.id ? 'bg-lime-500 text-black' : 'bg-zinc-700 text-white'}`}>
+                                                <p className="whitespace-pre-wrap text-sm">{msg.content}</p>
+                                            </div>
+                                        )}
+                                        {msg.message_type === 'watch-invite' && (
+                                            <WatchInviteBubble message={msg} currentUserId={user.id} onAccept={handleAcceptInvite} />
+                                        )}
+                                        {msg.message_type === 'watch-accept' && (
+                                             <div className="max-w-xs md:max-w-md p-3 rounded-lg bg-zinc-700 text-zinc-300 italic">
+                                                <p className="text-sm">{msg.content}</p>
+                                            </div>
+                                        )}
                                     </div>
                                 ))}
                                 <div ref={messagesEndRef} />
