@@ -60,16 +60,16 @@ const BanglaNutriPlanPage: React.FC<BanglaNutriPlanPageProps> = ({ onNavigateBac
             setLoading('profile', true);
 
             try {
-                const { data: mainProfileData, error: mainProfileError } = await supabase
-                    .from('profiles')
+                const { data: mainProfileData, error: mainProfileError } = await (supabase
+                    .from('profiles') as any)
                     .select('full_name, username')
                     .eq('id', user.id)
                     .single();
                 
                 if (mainProfileError) throw mainProfileError;
 
-                const { data: nutriProfileData, error: nutriProfileError } = await supabase
-                    .from('banglanutri_profiles')
+                const { data: nutriProfileData, error: nutriProfileError } = await (supabase
+                    .from('banglanutri_profiles') as any)
                     .select('*')
                     .eq('id', user.id)
                     .single();

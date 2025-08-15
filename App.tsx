@@ -744,6 +744,18 @@ const App: React.FC = () => {
     }>({ status: 'idle', peer: null, localStream: null });
     const peerConnection = useRef<RTCPeerConnection | null>(null);
     const remoteAudioRef = useRef<HTMLAudioElement>(null);
+    const ringtoneAudioRef = useRef<HTMLAudioElement>(null);
+
+    const playRingtone = () => {
+        ringtoneAudioRef.current?.play().catch(e => console.error("Ringtone playback failed", e));
+    };
+
+    const stopRingtone = () => {
+        if (ringtoneAudioRef.current) {
+            ringtoneAudioRef.current.pause();
+            ringtoneAudioRef.current.currentTime = 0;
+        }
+    };
     
     const sendSignal = async (receiverId: string, type: string, payload: any) => {
         await (supabase.from('webrtc_signals') as any).insert({
@@ -755,6 +767,7 @@ const App: React.FC = () => {
     };
     
     const cleanupCall = useCallback(() => {
+        stopRingtone();
         if (peerConnection.current) {
             peerConnection.current.close();
             peerConnection.current = null;
@@ -773,6 +786,7 @@ const App: React.FC = () => {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             setCallState({ status: 'outgoing', peer, localStream: stream });
+            playRingtone();
 
             const pc = new RTCPeerConnection();
             peerConnection.current = pc;
@@ -788,6 +802,7 @@ const App: React.FC = () => {
             pc.ontrack = event => {
                 if (remoteAudioRef.current) {
                     remoteAudioRef.current.srcObject = event.streams[0];
+                    remoteAudioRef.current.play().catch(e => console.error("Remote audio play failed", e));
                 }
             };
 
@@ -804,7 +819,7 @@ const App: React.FC = () => {
 
     const answerCall = async () => {
         if (callState.status !== 'incoming' || !peerConnection.current) return;
-
+        stopRingtone();
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             setCallState(prev => ({ ...prev, status: 'connected', localStream: stream }));
@@ -850,15 +865,18 @@ const App: React.FC = () => {
                  newPc.ontrack = event => {
                     if (remoteAudioRef.current) {
                         remoteAudioRef.current.srcObject = event.streams[0];
+                        remoteAudioRef.current.play().catch(e => console.error("Remote audio play failed", e));
                     }
                 };
 
                 await newPc.setRemoteDescription(new RTCSessionDescription(signal.payload.offer));
                 setCallState({ status: 'incoming', peer: callerProfile as ChatUser, localStream: null });
+                playRingtone();
                 break;
             
             case 'answer':
                 if (pc) await pc.setRemoteDescription(new RTCSessionDescription(signal.payload.answer));
+                stopRingtone();
                 setCallState(prev => ({...prev, status: 'connected' }));
                 break;
             
@@ -1095,6 +1113,7 @@ const App: React.FC = () => {
                onDecline={hangUp}
            />
        )}
+       <audio ref={ringtoneAudioRef} src="https://res.cloudinary.com/dy80ftu9k/video/upload/v1755296718/Untitled_3_mp3cut.net_u8mk54.mp3" preload="auto" loop></audio>
        <audio ref={remoteAudioRef} autoPlay />
 
        <div

@@ -1,4 +1,5 @@
 
+
 import { useState, useMemo, useEffect } from 'react';
 import { WeeklyPlan, DailyPlan, LoggedMeals, Meal } from './types';
 import { weeklyPlanData } from './data';
@@ -19,8 +20,8 @@ export const useMealPlan = (user: User | null) => {
         if (!user) return;
         const fetchLoggedMeals = async () => {
             const today = new Date().toISOString().slice(0, 10);
-            const { data, error } = await supabase
-                .from('banglanutri_logged_meals')
+            const { data, error } = await (supabase
+                .from('banglanutri_logged_meals') as any)
                 .select('meal_id')
                 .eq('user_id', user.id)
                 .gte('logged_date', today); // Fetch for today and future if needed, keeps it clean

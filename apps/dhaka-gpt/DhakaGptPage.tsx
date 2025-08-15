@@ -184,12 +184,6 @@ const GeminiBanglaPage: React.FC<GeminiBanglaPageProps> = ({ onNavigateBack, api
                         <button onClick={onNavigateBack} className="p-2 hover:bg-zinc-700 rounded-full">
                             <BackArrowIcon />
                         </button>
-                        <div className="relative">
-                            <div className="w-10 h-10 rounded-lg bg-teal-500 flex items-center justify-center font-bold border-2 border-teal-300">
-                                GB
-                            </div>
-                            <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-lime-400 rounded-full border-2 border-zinc-800"></div>
-                        </div>
                         <div>
                             <h1 className="text-2xl font-bold text-white">Gemini Bangla</h1>
                             <p className="text-sm text-zinc-400 font-semibold">আপনার বাংলা AI সহকারী</p>
