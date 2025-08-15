@@ -1,0 +1,3 @@
+Help in creating this app. See sql.txt to see how the database is: 
+App needs hardcoded Apis to work. Never remove them.
+Don't change any style of function of the app since everything is well thought out. Don't break ap by doing unnecessary optimizations.

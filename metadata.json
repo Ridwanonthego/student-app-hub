@@ -1,0 +1,7 @@
+{
+  "name": "Student's Hub Pro",
+  "description": "A collection of powerful AI-driven applications for students, including movie recommendations, content humanization, CV building, and more.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
