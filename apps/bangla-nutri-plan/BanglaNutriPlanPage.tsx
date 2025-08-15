@@ -1,9 +1,10 @@
 
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { BanglaNutriPlanPageProps, View, Meal, UserProfile, AiGeneratedRecipe, AiNutritionalInfo, GroceryCategory, NutriProfile } from './types';
 import { useMealPlan } from './hooks';
 import { generateGroceryList, getAiCoachTip, generateRecipeFromImage, generateRecipeFromText, getNutritionalInfo, regenerateMealPlan } from './gemini-service';
-import { Header, ViewSwitcher, DaySelector, DailyMealCard, MealDetailModal, AiCoachCard, DietaryPreferencesCard, RecipeGeneratorCard, FoodAnalysisCard, GroceryList, ComponentLoader, OnboardingModal } from './components';
+import { Header, BottomNavBar, DaySelector, DailyMealCard, MealDetailModal, AiCoachCard, DietaryPreferencesCard, RecipeGeneratorCard, FoodAnalysisCard, GroceryList, ComponentLoader, OnboardingModal } from './components';
 import { BackArrowIcon } from '../../components/Icons';
 import { supabase } from '../../supabase/client';
 import { Session, User } from '@supabase/supabase-js';
@@ -59,16 +60,16 @@ const BanglaNutriPlanPage: React.FC<BanglaNutriPlanPageProps> = ({ onNavigateBac
             setLoading('profile', true);
 
             try {
-                const { data: mainProfileData, error: mainProfileError } = await supabase
-                    .from('profiles')
+                const { data: mainProfileData, error: mainProfileError } = await (supabase
+                    .from('profiles') as any)
                     .select('full_name, username')
                     .eq('id', user.id)
                     .single();
                 
                 if (mainProfileError) throw mainProfileError;
 
-                const { data: nutriProfileData, error: nutriProfileError } = await supabase
-                    .from('banglanutri_profiles')
+                const { data: nutriProfileData, error: nutriProfileError } = await (supabase
+                    .from('banglanutri_profiles') as any)
                     .select('*')
                     .eq('id', user.id)
                     .single();
@@ -230,77 +231,77 @@ const BanglaNutriPlanPage: React.FC<BanglaNutriPlanPageProps> = ({ onNavigateBac
     }
 
     const renderMealPlanView = () => (
-        <div className="grid lg:grid-cols-3 gap-8 mt-6">
-            <div className="lg:col-span-2">
-                <DaySelector days={plan.map(p => p.day)} activeDay={activeDay} onSelectDay={setActiveDay} />
-                {activeDayPlan ? (
-                    <DailyMealCard 
-                        dayPlan={activeDayPlan}
-                        onLogMeal={logMeal}
-                        onSelectMeal={setSelectedMeal}
-                        isMealLogged={isMealLogged}
-                    />
-                ) : (
-                    <ComponentLoader text="Loading plan..." />
-                )}
-            </div>
-            <div className="space-y-6">
-                <AiCoachCard tip={aiTip} isLoading={loadingStates.tip} />
-                <DietaryPreferencesCard 
-                    exclusions={userProfile?.exclusions || []}
-                    onExclusionsChange={(newExcs) => setUserProfile(p => p ? {...p, exclusions: newExcs} : null)}
-                    onUpdatePlan={handleUpdatePlan}
-                    onClear={handleClearPreferences}
-                    isLoading={loadingStates.planUpdate}
+        <div className="space-y-6">
+            <AiCoachCard tip={aiTip} isLoading={loadingStates.tip} />
+            <DaySelector days={plan.map(p => p.day)} activeDay={activeDay} onSelectDay={setActiveDay} />
+            {activeDayPlan ? (
+                <DailyMealCard 
+                    dayPlan={activeDayPlan}
+                    onLogMeal={logMeal}
+                    onSelectMeal={setSelectedMeal}
+                    isMealLogged={isMealLogged}
                 />
-                <RecipeGeneratorCard
-                    onGenerateFromImage={handleGenerateRecipeFromImage}
-                    onGenerateFromText={handleGenerateRecipeFromText}
-                    recipe={generatedRecipe}
-                    isLoading={loadingStates.recipe}
-                    error={errorStates.recipe}
-                />
-                <FoodAnalysisCard
-                    onAnalyze={handleAnalyzeDish}
-                    nutrients={analyzedDish}
-                    isLoading={loadingStates.analysis}
-                    error={errorStates.analysis}
-                />
-            </div>
+            ) : (
+                <ComponentLoader text="Loading plan..." />
+            )}
         </div>
     );
     
     const renderGroceryListView = () => (
-        <div className="mt-6">
+        <div>
             <GroceryList list={groceryList} isLoading={loadingStates.grocery} />
              {errorStates.grocery && <p className="text-center text-red-500 mt-4 font-bold">{errorStates.grocery}</p>}
         </div>
     );
 
+    const renderAiToolsView = () => (
+        <div className="space-y-6">
+             <DietaryPreferencesCard 
+                exclusions={userProfile?.exclusions || []}
+                onExclusionsChange={(newExcs) => setUserProfile(p => p ? {...p, exclusions: newExcs} : null)}
+                onUpdatePlan={handleUpdatePlan}
+                onClear={handleClearPreferences}
+                isLoading={loadingStates.planUpdate}
+            />
+            <RecipeGeneratorCard
+                onGenerateFromImage={handleGenerateRecipeFromImage}
+                onGenerateFromText={handleGenerateRecipeFromText}
+                recipe={generatedRecipe}
+                isLoading={loadingStates.recipe}
+                error={errorStates.recipe}
+            />
+            <FoodAnalysisCard
+                onAnalyze={handleAnalyzeDish}
+                nutrients={analyzedDish}
+                isLoading={loadingStates.analysis}
+                error={errorStates.analysis}
+            />
+        </div>
+    );
+    
+    const renderContent = () => {
+        switch(activeView) {
+            case 'meal-plan': return renderMealPlanView();
+            case 'grocery-list': return renderGroceryListView();
+            case 'ai-tools': return renderAiToolsView();
+            default: return renderMealPlanView();
+        }
+    }
+
     return (
-        <div className="font-poppins bg-[#F4F1DE] min-h-screen">
+        <div className="font-poppins bg-[#F4F1DE] min-h-screen pb-24">
              <OnboardingModal
                 isOpen={showOnboarding}
                 onClose={() => {}} // Disallow closing
                 onSave={handleSaveOnboarding}
                 isLoading={loadingStates.planUpdate}
             />
-            <div className="relative">
-                <button
-                    onClick={onNavigateBack}
-                    className="absolute z-30 left-4 top-[88px] flex items-center gap-2 bg-white text-black font-bold p-2 pr-3 border-2 border-black shadow-[2px_2px_0px_#000] hover:bg-gray-100 transition-all active:shadow-none active:translate-x-0.5 active:translate-y-0.5"
-                    aria-label="Back to Hub"
-                    >
-                    <BackArrowIcon />
-                    <span className="hidden sm:inline">Back to Hub</span>
-                </button>
-            </div>
-            {userProfile && <Header user={userProfile} />}
-            <ViewSwitcher activeView={activeView} onSwitch={setActiveView} />
+            <Header user={userProfile} onBack={onNavigateBack} />
             <main className="max-w-7xl mx-auto p-4 sm:p-6">
-                {activeView === 'meal-plan' ? renderMealPlanView() : renderGroceryListView()}
+                {renderContent()}
             </main>
             <MealDetailModal meal={selectedMeal} onClose={() => setSelectedMeal(null)} />
+            <BottomNavBar activeTab={activeView} onTabChange={setActiveView} />
         </div>
     );
 };

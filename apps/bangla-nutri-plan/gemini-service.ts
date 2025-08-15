@@ -1,25 +1,210 @@
 
 
 import { GoogleGenAI, Type } from "@google/genai";
-import { WeeklyPlan, DailyPlan, Meal, UserProfile, AiGeneratedRecipe, AiNutritionalInfo, GroceryCategory, LoggedMeals, NutriProfile } from './types';
+import { WeeklyPlan, DailyPlan, LoggedMeals, AiNutritionalInfo, GroceryCategory, AiGeneratedRecipe, NutriProfile } from "./types";
+import { weeklyPlanData } from "./data";
 
-// --- Schemas for AI responses ---
+const groceryListSchema = {
+    type: Type.OBJECT,
+    properties: {
+        categories: {
+            type: Type.ARRAY,
+            description: "A list of grocery categories.",
+            items: {
+                type: Type.OBJECT,
+                properties: {
+                    categoryName: { type: Type.STRING, description: "The name of the category, e.g., 'Produce', 'Protein (Fish & Meat)'." },
+                    items: {
+                        type: Type.ARRAY,
+                        description: "List of items in this category.",
+                        items: { type: Type.STRING, description: "e.g., 'Onions: 1 kg', 'Rui Maach: 500g'" }
+                    }
+                },
+                required: ['categoryName', 'items'],
+            }
+        }
+    },
+    required: ['categories'],
+};
+
+export const generateGroceryList = async (mealPlan: WeeklyPlan, apiKey: string): Promise<GroceryCategory[]> => {
+    if (!apiKey) throw new Error("API key is not configured.");
+    const ai = new GoogleGenAI({ apiKey });
+    const systemInstruction = "You are a shopping assistant. Based on the provided 7-day Bangladeshi meal plan, generate a categorized grocery list. Consolidate ingredients and estimate quantities for one person for a week. The categories should be logical for a Bangladeshi grocery store (e.g., 'Produce', 'Protein (Fish & Meat)', 'Pantry & Spices', 'Dairy & Eggs'). Return ONLY the JSON object.";
+    
+    const simplifiedPlan = mealPlan.map(day => ({
+        day: day.day,
+        meals: day.meals.map(meal => meal.name).join(', ')
+    }));
+
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: `Generate a grocery list for this weekly plan: ${JSON.stringify(simplifiedPlan)}`,
+            config: {
+                systemInstruction,
+                responseMimeType: "application/json",
+                responseSchema: groceryListSchema,
+            },
+        });
+        const result = JSON.parse(response.text);
+        return result.categories;
+    } catch (e) {
+        console.error("Error generating grocery list:", e);
+        throw new Error("Could not generate the grocery list. The AI might be busy.");
+    }
+};
+
+export const getAiCoachTip = async (dayPlan: DailyPlan, loggedMeals: LoggedMeals, apiKey: string): Promise<string> => {
+    if (!apiKey) throw new Error("API key is not configured.");
+    const ai = new GoogleGenAI({ apiKey });
+    const systemInstruction = "You are a friendly, encouraging nutrition coach for a Bangladeshi user. Your tone is supportive and culturally aware. Give a short, relevant, one or two-sentence tip based on the user's meal plan for the day and what they have already eaten. Keep it concise.";
+    
+    const loggedMealNames = dayPlan.meals.filter(m => loggedMeals[m.id]).map(m => m.name);
+    const upcomingMealNames = dayPlan.meals.filter(m => !loggedMeals[m.id]).map(m => m.name);
+
+    let prompt = `Today's plan is: ${dayPlan.meals.map(m => m.name).join(', ')}. `;
+    if (loggedMealNames.length > 0) {
+        prompt += `The user has already eaten: ${loggedMealNames.join(', ')}. `;
+    } else {
+        prompt += "The user hasn't eaten anything yet. ";
+    }
+    if (upcomingMealNames.length > 0) {
+        prompt += `Upcoming meals are: ${upcomingMealNames.join(', ')}.`;
+    }
+    
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: prompt,
+            config: { systemInstruction }
+        });
+        return response.text.trim();
+    } catch (e) {
+        console.error("Error getting AI coach tip:", e);
+        return "Remember to stay hydrated and enjoy your meals!";
+    }
+};
+
+const recipeSchema = {
+    type: Type.OBJECT,
+    properties: {
+        name: { type: Type.STRING, description: "The name of the recipe." },
+        description: { type: Type.STRING, description: "A short, enticing description of the dish." },
+        ingredients: {
+            type: Type.ARRAY,
+            description: "A list of required ingredients.",
+            items: { type: Type.STRING }
+        },
+        instructions: {
+            type: Type.ARRAY,
+            description: "A list of step-by-step cooking instructions.",
+            items: { type: Type.STRING }
+        }
+    },
+    required: ['name', 'description', 'ingredients', 'instructions']
+};
+
+export const generateRecipeFromText = async (ingredients: string, apiKey: string): Promise<AiGeneratedRecipe> => {
+    if (!apiKey) throw new Error("API key is not configured.");
+    const ai = new GoogleGenAI({ apiKey });
+    const systemInstruction = "You are a creative Bangladeshi chef. Based on the ingredients provided, generate a single, delicious, and easy-to-follow Bangladeshi recipe. If the ingredients are sparse, you can suggest adding one or two common pantry staples. Return ONLY the JSON object.";
+    
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: `Ingredients: "${ingredients}"`,
+            config: {
+                systemInstruction,
+                responseMimeType: "application/json",
+                responseSchema: recipeSchema,
+            }
+        });
+        return JSON.parse(response.text);
+    } catch (e) {
+        console.error("Error generating recipe from text:", e);
+        throw new Error("Could not generate a recipe. Please check your ingredients or try again.");
+    }
+};
+
+export const generateRecipeFromImage = async (base64Image: string, apiKey: string): Promise<AiGeneratedRecipe> => {
+    if (!apiKey) throw new Error("API key is not configured.");
+    const ai = new GoogleGenAI({ apiKey });
+    const systemInstruction = "You are a creative Bangladeshi chef. First, identify the key ingredients from the image of a fridge or pantry. Then, based on those ingredients, generate a single, delicious, and easy-to-follow Bangladeshi recipe. Return ONLY the JSON object.";
+    
+    const imagePart = { inlineData: { mimeType: 'image/jpeg', data: base64Image } };
+    const textPart = { text: "What Bangladeshi recipe can I make with these ingredients?" };
+
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: { parts: [imagePart, textPart] },
+            config: {
+                systemInstruction,
+                responseMimeType: "application/json",
+                responseSchema: recipeSchema,
+            },
+        });
+        return JSON.parse(response.text);
+    } catch (e) {
+        console.error("Error generating recipe from image:", e);
+        throw new Error("Sorry, I couldn't analyze the image. Please try a clearer picture.");
+    }
+};
+
+const nutritionalInfoSchema = {
+    type: Type.OBJECT,
+    properties: {
+        dishName: { type: Type.STRING },
+        calories: { type: Type.NUMBER },
+        protein: { type: Type.NUMBER },
+        carbs: { type: Type.NUMBER },
+        fat: { type: Type.NUMBER },
+        summary: { type: Type.STRING, description: "A brief one-sentence summary of the nutritional value." }
+    },
+    required: ["dishName", "calories", "protein", "carbs", "fat", "summary"]
+};
+
+export const getNutritionalInfo = async (dishName: string, apiKey: string): Promise<AiNutritionalInfo> => {
+    if (!apiKey) throw new Error("API key is not configured.");
+    const ai = new GoogleGenAI({ apiKey });
+    const systemInstruction = `You are a nutritionist. Provide an estimated nutritional breakdown for a standard single serving of the given Bangladeshi dish. Provide values for calories, protein (g), carbs (g), and fat (g). Also include a brief summary. Return ONLY the JSON object.`;
+    
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: `Dish: "${dishName}"`,
+            config: {
+                systemInstruction,
+                responseMimeType: "application/json",
+                responseSchema: nutritionalInfoSchema,
+            }
+        });
+        return JSON.parse(response.text);
+    } catch (e) {
+        console.error("Error getting nutritional info:", e);
+        throw new Error("Could not analyze the dish. Please check the name and try again.");
+    }
+};
 
 const mealSchema = {
     type: Type.OBJECT,
     properties: {
-        id: { type: Type.STRING, description: "Unique ID for the meal, e.g., 'd1-b' for Day 1 Breakfast." },
-        name: { type: Type.STRING, description: "The Bengali or common name of the meal." },
-        emoji: { type: Type.STRING, description: "An appropriate emoji for the meal." },
-        description: { type: Type.STRING, description: "A brief, enticing description of the meal components." },
-        calories: { type: Type.NUMBER, description: "Estimated total calories." },
-        weight: { type: Type.NUMBER, description: "Estimated weight in grams." },
-        isRiceMeal: { type: Type.BOOLEAN, description: "True if the meal includes rice." },
+        id: { type: Type.STRING },
+        name: { type: Type.STRING },
+        emoji: { type: Type.STRING },
+        description: { type: Type.STRING },
+        calories: { type: Type.NUMBER },
+        weight: { type: Type.NUMBER },
+        isRiceMeal: { type: Type.BOOLEAN },
         breakdown: {
             type: Type.ARRAY,
             items: {
                 type: Type.OBJECT,
-                properties: { item: { type: Type.STRING }, calories: { type: Type.NUMBER } },
+                properties: {
+                    item: { type: Type.STRING },
+                    calories: { type: Type.NUMBER }
+                },
                 required: ['item', 'calories']
             }
         }
@@ -30,8 +215,8 @@ const mealSchema = {
 const dailyPlanSchema = {
     type: Type.OBJECT,
     properties: {
-        day: { type: Type.NUMBER, description: "Day number (1-7)." },
-        meals: { type: Type.ARRAY, description: "A list of 4 meals for the day.", items: mealSchema }
+        day: { type: Type.NUMBER },
+        meals: { type: Type.ARRAY, items: mealSchema }
     },
     required: ['day', 'meals']
 };
@@ -39,133 +224,40 @@ const dailyPlanSchema = {
 const weeklyPlanSchema = {
     type: Type.OBJECT,
     properties: {
-        plan: { type: Type.ARRAY, description: "A 7-day meal plan.", items: dailyPlanSchema }
+        plan: {
+            type: Type.ARRAY,
+            description: "The complete 7-day meal plan.",
+            items: dailyPlanSchema
+        }
     },
     required: ['plan']
 };
 
-const groceryListSchema = {
-    type: Type.OBJECT,
-    properties: {
-        categories: {
-            type: Type.ARRAY,
-            items: {
-                type: Type.OBJECT,
-                properties: {
-                    categoryName: { type: Type.STRING, description: "e.g., 'Vegetables', 'Proteins', 'Spices'." },
-                    items: { type: Type.ARRAY, items: { type: Type.STRING } }
-                },
-                required: ['categoryName', 'items']
-            }
-        }
-    },
-    required: ['categories']
-};
-
-const nutritionalInfoSchema = {
-    type: Type.OBJECT,
-    properties: {
-        dishName: { type: Type.STRING },
-        calories: { type: Type.NUMBER },
-        protein: { type: Type.NUMBER, description: "Protein in grams." },
-        carbs: { type: Type.NUMBER, description: "Carbohydrates in grams." },
-        fat: { type: Type.NUMBER, description: "Fat in grams." },
-        summary: { type: Type.STRING, description: "A brief nutritional summary." }
-    },
-    required: ['dishName', 'calories', 'protein', 'carbs', 'fat', 'summary']
-};
-
-const recipeSchema = {
-    type: Type.OBJECT,
-    properties: {
-        name: { type: Type.STRING, description: "A creative Bengali or English name for the dish." },
-        description: { type: Type.STRING, description: "A short, enticing description." },
-        ingredients: { type: Type.ARRAY, items: { type: Type.STRING } },
-        instructions: { type: Type.ARRAY, items: { type: Type.STRING } }
-    },
-    required: ['name', 'description', 'ingredients', 'instructions']
-};
-
-
-// --- Service Functions ---
-
-const callGemini = async (apiKey: string, systemInstruction: string, userPrompt: string, schema?: any) => {
+export const regenerateMealPlan = async (userProfile: NutriProfile, apiKey: string): Promise<WeeklyPlan> => {
     if (!apiKey) throw new Error("API key is not configured.");
     const ai = new GoogleGenAI({ apiKey });
+    const systemInstruction = `You are a professional Bangladeshi nutritionist. The user wants to generate a new 7-day meal plan based on their profile and dietary exclusions.
+You will be given the user's profile (age, weight, height, activity level, goal) and a list of exclusions. Your task is to generate a complete, suitable, and delicious 7-day Bangladeshi meal plan.
+Ensure the new meals are nutritionally balanced and fit the user's goal.
+Crucially, you MUST maintain the exact original JSON structure for the entire 7-day plan, including all fields like 'id', 'calories', 'weight', 'isRiceMeal', and 'breakdown'. Estimate the nutritional values accurately.
+Return ONLY the JSON object containing the complete, updated 7-day plan.`;
+    
+    const prompt = `Here is the user's profile: ${JSON.stringify(userProfile)}. Please provide a complete 7-day plan in JSON format. Exclude the following items: ${userProfile.exclusions?.join(', ') || 'None'}.`;
+
     try {
-        const config: any = { systemInstruction };
-        if (schema) {
-            config.responseMimeType = "application/json";
-            config.responseSchema = schema;
-        }
         const response = await ai.models.generateContent({
             model: "gemini-2.5-flash",
-            contents: userPrompt,
-            config: config
+            contents: prompt,
+            config: {
+                systemInstruction,
+                responseMimeType: "application/json",
+                responseSchema: weeklyPlanSchema,
+            },
         });
-        return response.text;
-    } catch (error) {
-        console.error("Gemini API Error:", error);
-        if (error instanceof Error && (error.message.includes('API_KEY_INVALID') || error.message.includes('API key not valid'))) {
-          throw new Error("The provided Gemini API Key is invalid or expired.");
-        }
-        throw new Error("Failed to communicate with the AI. Please try again later.");
+        const result = JSON.parse(response.text);
+        return result.plan as WeeklyPlan;
+    } catch (e) {
+        console.error("Error regenerating meal plan:", e);
+        throw new Error("Could not update the meal plan. The AI might be busy.");
     }
-};
-
-export const regenerateMealPlan = async (profile: Partial<NutriProfile>, apiKey: string): Promise<WeeklyPlan> => {
-    const systemInstruction = `You are a Bangladeshi nutritionist. Create a 7-day healthy meal plan based on the user's profile. The plan must feature common Bangladeshi dishes and consist of 4 meals per day: breakfast, lunch, snack, and dinner. You must adhere to the user's dietary exclusions. Return ONLY the JSON object.`;
-    const userPrompt = `Generate a meal plan for a user with these details: Age: ${profile.age}, Weight: ${profile.weight_kg}kg, Height: ${profile.height_cm}cm, Activity: ${profile.activity_level}, Goal: ${profile.goal} weight. Exclusions: ${profile.exclusions?.join(', ') || 'None'}.`;
-    
-    const responseText = await callGemini(apiKey, systemInstruction, userPrompt, weeklyPlanSchema);
-    const result = JSON.parse(responseText);
-    return result.plan;
-};
-
-export const generateGroceryList = async (plan: WeeklyPlan, apiKey: string): Promise<GroceryCategory[]> => {
-    const systemInstruction = `You are a helpful assistant. Based on the provided 7-day meal plan, create a categorized grocery list. Combine similar items and provide reasonable quantities. Return ONLY the JSON object.`;
-    const userPrompt = `Here is the meal plan:\n${JSON.stringify(plan)}`;
-    
-    const responseText = await callGemini(apiKey, systemInstruction, userPrompt, groceryListSchema);
-    const result = JSON.parse(responseText);
-    return result.categories;
-};
-
-export const getAiCoachTip = async (activeDayPlan: DailyPlan, loggedMeals: LoggedMeals, apiKey: string): Promise<string> => {
-    const systemInstruction = `You are a friendly, encouraging nutrition coach. Provide a short, one-sentence tip in English based on the user's meal plan for the day and what they've already eaten.`;
-    const userPrompt = `Today's plan: ${JSON.stringify(activeDayPlan.meals.map(m => m.name))}. Meals eaten so far: ${JSON.stringify(Object.keys(loggedMeals))}. Give me a tip.`;
-    
-    return await callGemini(apiKey, systemInstruction, userPrompt);
-};
-
-export const generateRecipeFromText = async (ingredients: string, apiKey: string): Promise<AiGeneratedRecipe> => {
-    const systemInstruction = `You are a chef specializing in Bangladeshi cuisine. Create a simple, delicious recipe using the provided ingredients. Return ONLY the JSON object.`;
-    const userPrompt = `I have these ingredients: ${ingredients}. Create a recipe.`;
-    
-    const responseText = await callGemini(apiKey, systemInstruction, userPrompt, recipeSchema);
-    return JSON.parse(responseText);
-};
-
-export const generateRecipeFromImage = async (base64Image: string, apiKey: string): Promise<AiGeneratedRecipe> => {
-    if (!apiKey) throw new Error("API key is not configured.");
-    const ai = new GoogleGenAI({ apiKey });
-    const systemInstruction = `You are a chef specializing in Bangladeshi cuisine. Identify the ingredients in the image and create a simple, delicious recipe using them. Return ONLY the JSON object.`;
-    const imagePart = { inlineData: { mimeType: 'image/jpeg', data: base64Image } };
-    const textPart = { text: "What recipe can I make with these ingredients?" };
-
-    const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: { parts: [imagePart, textPart] },
-        config: { systemInstruction, responseMimeType: "application/json", responseSchema: recipeSchema }
-    });
-    
-    return JSON.parse(response.text);
-};
-
-export const getNutritionalInfo = async (dishName: string, apiKey: string): Promise<AiNutritionalInfo> => {
-    const systemInstruction = `You are a nutritionist. Provide an estimated nutritional breakdown for the given Bangladeshi dish. Return ONLY the JSON object.`;
-    const userPrompt = `Analyze the nutritional content of: "${dishName}"`;
-
-    const responseText = await callGemini(apiKey, systemInstruction, userPrompt, nutritionalInfoSchema);
-    return JSON.parse(responseText);
 };

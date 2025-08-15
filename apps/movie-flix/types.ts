@@ -1,3 +1,7 @@
+
+
+import { ChatUser } from "../chat/types";
+
 // Base types from TMDB
 export interface Movie {
   id: number;
@@ -130,6 +134,7 @@ export interface MediaDetailViewProps {
     isLiked: boolean;
     onToggleDislike: (mediaId: number, mediaType: 'movie' | 'tv', title: string) => void;
     isDisliked: boolean;
+    onWatchWithFriend: () => void;
 }
 
 export interface TasteProfileModalProps {
@@ -146,6 +151,13 @@ export interface FilterModalProps {
     onApply: (filters: DiscoverFilters) => void;
     genres: Genre[];
     languages: Language[];
+}
+
+export interface UserSearchModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    currentUserId: string;
+    onSendInvite: (user: ChatUser) => void;
 }
 
 

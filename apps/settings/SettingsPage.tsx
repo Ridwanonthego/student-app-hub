@@ -93,6 +93,10 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ user, onNavigateBack }) => 
     const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
     const [avatarFile, setAvatarFile] = useState<File | null>(null);
 
+    const handleLogout = async () => {
+        await supabase.auth.signOut();
+    };
+
 
     useEffect(() => {
         const fetchData = async () => {
@@ -102,18 +106,18 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ user, onNavigateBack }) => 
             try {
                 // Fetch data from all three tables concurrently
                 const [profileRes, cvRes, nutriRes] = await Promise.all([
-                     supabase
-                        .from('profiles')
+                     (supabase
+                        .from('profiles') as any)
                         .select('full_name, username, gemini_api_key, avatar_url')
                         .eq('id', user.id)
                         .single(),
-                     supabase
-                        .from('cv_data')
+                     (supabase
+                        .from('cv_data') as any)
                         .select('linkedin_url, raw_info')
                         .eq('id', user.id)
                         .single(),
-                     supabase
-                        .from('banglanutri_profiles')
+                     (supabase
+                        .from('banglanutri_profiles') as any)
                         .select('age, height_cm, weight_kg')
                         .eq('id', user.id)
                         .single()
@@ -313,11 +317,18 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ user, onNavigateBack }) => 
                     </SettingsSection>
                 </div>
 
-                <div className="mt-8 pt-8 border-t-2 border-zinc-700 flex flex-col sm:flex-row justify-between items-center gap-4">
+                <div className="mt-8 pt-8 border-t-2 border-zinc-700 flex flex-col sm:flex-row justify-end items-center gap-4">
+                     <button
+                        onClick={handleLogout}
+                        disabled={saving}
+                        className="w-full sm:w-auto bg-zinc-700 hover:bg-red-600 text-zinc-300 hover:text-white font-bold py-3 px-4 rounded-md transition-colors disabled:bg-zinc-800"
+                    >
+                        Logout
+                    </button>
                     <button
                         onClick={handleSave}
                         disabled={saving}
-                        className="w-full sm:w-auto flex-grow bg-lime-400 text-zinc-900 font-bold p-3 rounded-md border-2 border-lime-400 hover:bg-lime-500 transition-colors disabled:bg-zinc-600 flex items-center justify-center gap-2"
+                        className="w-full sm:w-auto bg-lime-400 text-zinc-900 font-bold p-3 rounded-md border-2 border-lime-400 hover:bg-lime-500 transition-colors disabled:bg-zinc-600 flex items-center justify-center gap-2"
                     >
                         {saving ? <SpinnerIcon /> : (success ? <CheckIcon/> : 'Save All Settings')}
                     </button>

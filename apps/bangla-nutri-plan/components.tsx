@@ -1,50 +1,66 @@
 
-import React, { useState, useRef, useEffect } from 'react';
-import { Meal, UserProfile, DailyPlan, MealDetailModalProps, ComponentLoaderProps, RecipeGeneratorCardProps, FoodAnalysisCardProps, AiGeneratedRecipe, AiNutritionalInfo, GroceryCategory, DietaryPreferencesCardProps, OnboardingModalProps, NutriProfile, ActivityLevel, Goal } from './types';
-import { RiceBowlIcon, UserIcon, CloseIcon, CameraIcon, SpinnerIcon } from '../../components/Icons';
 
-export const Header: React.FC<{ user: UserProfile }> = ({ user }) => (
+import React, { useState, useRef, useEffect } from 'react';
+import { Meal, UserProfile, DailyPlan, MealDetailModalProps, ComponentLoaderProps, RecipeGeneratorCardProps, FoodAnalysisCardProps, AiGeneratedRecipe, AiNutritionalInfo, GroceryCategory, DietaryPreferencesCardProps, OnboardingModalProps, NutriProfile, ActivityLevel, Goal, BottomNavBarProps } from './types';
+import { RiceBowlIcon, UserIcon, CloseIcon, CameraIcon, SpinnerIcon, BackArrowIcon, ListIcon, CartIcon, SparklesIcon } from '../../components/Icons';
+
+export const Header: React.FC<{ user: UserProfile | null, onBack: () => void }> = ({ user, onBack }) => (
     <header className="sticky top-0 z-20 bg-white border-b-2 border-black p-4">
         <div className="max-w-7xl mx-auto flex justify-between items-center">
+             <button
+                onClick={onBack}
+                className="flex items-center gap-2 bg-white text-black font-bold p-2 border-2 border-black shadow-[2px_2px_0px_#000] hover:bg-gray-100 transition-all active:shadow-none active:translate-x-0.5 active:translate-y-0.5"
+                aria-label="Back to Hub"
+                >
+                <BackArrowIcon />
+            </button>
             <div className="flex items-center gap-2">
                 <RiceBowlIcon className="w-8 h-8 p-1 bg-lime-300 border-2 border-black"/>
                 <div>
-                    <h1 className="text-2xl font-extrabold text-black">BanglaNutriPlan</h1>
-                    <p className="text-sm text-gray-600 font-bold">Your Daily Bangladeshi Meal Guide</p>
+                    <h1 className="text-xl sm:text-2xl font-extrabold text-black">BanglaNutriPlan</h1>
                 </div>
             </div>
-            <div className="flex items-center gap-4 sm:gap-6">
-                <div className="flex items-center gap-2 p-2 border-2 border-black bg-white shadow-[4px_4px_0px_#000]">
-                    <UserIcon className="w-8 h-8 p-1.5 bg-gray-200 text-gray-600 "/>
+            {user && (
+                 <div className="flex items-center gap-2 p-2 border-2 border-black bg-white shadow-[4px_4px_0px_#000]">
+                    <UserIcon className="w-8 h-8 p-1.5 bg-gray-200 text-gray-600 hidden sm:block"/>
                     <div>
-                        <p className="font-bold text-gray-800">{user.name}</p>
+                        <p className="font-bold text-gray-800 text-sm sm:text-base">{user.name}</p>
                         <p className={`text-xs font-bold px-2 py-0.5 w-fit ${user.bmiStatus === 'Fit' ? 'bg-green-300 border border-green-800 text-green-900' : 'bg-orange-300 border border-orange-800 text-orange-900'}`}>{user.bmiStatus}</p>
                     </div>
                 </div>
-            </div>
+            )}
         </div>
     </header>
 );
 
-export const ViewSwitcher: React.FC<{ activeView: 'meal-plan' | 'grocery-list', onSwitch: (view: 'meal-plan' | 'grocery-list') => void }> = ({ activeView, onSwitch }) => (
-    <div className="max-w-7xl mx-auto flex gap-2 border-b-2 border-black mt-4 px-4">
-        <button 
-            onClick={() => onSwitch('meal-plan')}
-            className={`py-2 px-4 text-lg font-bold transition-all duration-200 border-2 border-black ${activeView === 'meal-plan' ? 'bg-white text-black' : 'bg-gray-200 text-gray-500'}`}
-        >
-            Meal Plan
-        </button>
-        <button 
-            onClick={() => onSwitch('grocery-list')}
-            className={`py-2 px-4 text-lg font-bold transition-all duration-200 border-2 border-black ${activeView === 'grocery-list' ? 'bg-white text-black' : 'bg-gray-200 text-gray-500'}`}
-        >
-            Grocery List
-        </button>
-    </div>
-);
+export const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeTab, onTabChange }) => {
+    const navItems = [
+        { id: 'meal-plan', label: 'Plan', icon: <ListIcon /> },
+        { id: 'grocery-list', label: 'Grocery', icon: <CartIcon /> },
+        { id: 'ai-tools', label: 'AI Tools', icon: <SparklesIcon /> },
+    ];
+    
+    return (
+        <nav className="fixed bottom-0 left-0 right-0 bg-white border-t-2 border-black flex justify-around h-16 shadow-[0_-4px_8px_rgba(0,0,0,0.1)] z-30">
+            {navItems.map(item => (
+                <button
+                    key={item.id}
+                    onClick={() => onTabChange(item.id as any)}
+                    className={`flex flex-col items-center justify-center w-full transition-all duration-200 ${activeTab === item.id ? 'text-lime-600' : 'text-gray-500 hover:text-lime-500'}`}
+                >
+                    <div className={`p-1 rounded-full transition-all ${activeTab === item.id ? 'bg-lime-400' : 'bg-transparent'}`}>
+                        {React.cloneElement(item.icon, {className: `w-7 h-7`})}
+                    </div>
+                    <span className="text-xs font-bold">{item.label}</span>
+                </button>
+            ))}
+        </nav>
+    );
+};
+
 
 export const DaySelector: React.FC<{ days: number[]; activeDay: number; onSelectDay: (day: number) => void }> = ({ days, activeDay, onSelectDay }) => (
-    <div className="flex gap-2 mb-6 overflow-x-auto py-2 -mx-4 px-4">
+    <div className="flex gap-2 mb-6 overflow-x-auto pb-2 -mx-4 px-4">
         {days.map(day => (
             <button
                 key={day}
@@ -58,23 +74,27 @@ export const DaySelector: React.FC<{ days: number[]; activeDay: number; onSelect
 );
 
 const MealItem: React.FC<{ meal: Meal; onLog: () => void; onSelect: () => void; isLogged: boolean }> = ({ meal, onLog, onSelect, isLogged }) => (
-    <div className={`flex items-center gap-4 transition-all duration-300 p-4 border-2 border-black ${isLogged ? 'bg-lime-200' : 'bg-white'}`}>
-        <div className="text-4xl p-2 bg-white border-2 border-black">{meal.emoji}</div>
-        <div className="flex-grow cursor-pointer" onClick={onSelect}>
-            <p className="font-bold text-gray-800">{meal.name}</p>
-            <p className="text-sm text-gray-500">{meal.description}</p>
+    <div className={`transition-all duration-300 p-4 border-2 border-black ${isLogged ? 'bg-lime-200' : 'bg-white'}`}>
+        <div className="flex items-center gap-4 cursor-pointer" onClick={onSelect}>
+            <div className="text-4xl p-2 bg-white border-2 border-black">{meal.emoji}</div>
+            <div className="flex-grow">
+                <p className="font-bold text-gray-800">{meal.name}</p>
+                <p className="text-sm text-gray-500">{meal.description}</p>
+            </div>
         </div>
-        <div className="text-right">
-            <p className="font-bold text-gray-700">{meal.calories} kcal</p>
-            <p className="text-sm text-gray-500">{meal.weight}g</p>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mt-4 gap-4">
+            <div className="text-left">
+                <p className="font-bold text-gray-700">{meal.calories} kcal</p>
+                <p className="text-sm text-gray-500">{meal.weight}g</p>
+            </div>
+            <button
+                onClick={onLog}
+                disabled={isLogged}
+                className={`px-4 py-2 border-2 border-black font-bold text-sm transition-all w-full sm:w-32 shadow-[2px_2px_0px_#000] active:shadow-none active:translate-y-0.5 ${isLogged ? 'bg-lime-500 text-white cursor-not-allowed shadow-none translate-y-0.5' : 'bg-white text-green-700 hover:bg-lime-200'}`}
+            >
+                {isLogged ? 'Eaten ✓' : 'Log Meal'}
+            </button>
         </div>
-        <button
-            onClick={onLog}
-            disabled={isLogged}
-            className={`px-4 py-2 border-2 border-black font-bold text-sm transition-all w-28 shadow-[2px_2px_0px_#000] active:shadow-none active:translate-y-0.5 ${isLogged ? 'bg-lime-500 text-white cursor-not-allowed shadow-none translate-y-0.5' : 'bg-white text-green-700 hover:bg-lime-200'}`}
-        >
-            {isLogged ? 'Eaten ✓' : 'Log Meal'}
-        </button>
     </div>
 );
 

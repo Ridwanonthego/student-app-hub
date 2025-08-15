@@ -1,5 +1,4 @@
 
-
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import WatchFinderPage from './apps/movie-flix/MovieFlixPage';
 import AiHumanizerPage from './apps/ai-humanizer/AiHumanizerPage';
@@ -12,36 +11,73 @@ import GeminiBanglaPage from './apps/dhaka-gpt/DhakaGptPage';
 import SettingsPage from './apps/settings/SettingsPage';
 import TodoListPage from './apps/todo-list/TodoListPage';
 import { AppCardProps, Page, Profile, AppHubPreferences } from './types';
-import { MovieIcon, HumanizerIcon, CvIcon, NutritionIcon, StataIcon, ShikhokIcon, BrainCircuitIcon, MenuIcon, SpinnerIcon, EyeIcon, EyeOffIcon, GearIcon, ChatBubbleIcon, CloseIcon, TodoListIcon, ThemeIcon, HomeIcon, TherapyIcon, ExternalLinkIcon, UserIcon, CheckIcon } from './components/Icons';
+import { MovieIcon, HumanizerIcon, CvIcon, NutritionIcon, StataIcon, ShikhokIcon, BrainCircuitIcon, MenuIcon, SpinnerIcon, EyeIcon, EyeOffIcon, GearIcon, ChatBubbleIcon, CloseIcon, TodoListIcon, ThemeIcon, HomeIcon, TherapyIcon, ExternalLinkIcon, UserIcon, CheckIcon, SparklesIcon, PinIcon, PinSolidIcon } from './components/Icons';
 import { supabase } from './supabase/client';
-import { Session, User, PostgrestSingleResponse } from '@supabase/supabase-js';
+import { Session, User } from '@supabase/supabase-js';
 import { wallpapers } from './media/wallpapers';
 import { hoverSound, clickSound } from './media/sounds';
 import { Database } from './supabase/database.types';
 import MusicPlayer from './components/MusicPlayer';
-import { songList, Song } from './media/songs';
 import Chat from './apps/chat/Chat';
+import { useMusicPlayer } from './hooks/useMusicPlayer';
+import { useWebRTC } from './hooks/useWebRTC';
+import { CallCapsule } from './components/CallCapsule';
+
+
+const fictionalNames = [
+  'Aragorn', 'BilboBaggins', 'Gandalf', 'Legolas', 'Gimli', 'FrodoBaggins', 'SamwiseGamgee',
+  'LukeSkywalker', 'DarthVader', 'PrincessLeia', 'HanSolo', 'Chewbacca', 'Yoda',
+  'HarryPotter', 'HermioneGranger', 'RonWeasley', 'AlbusDumbledore', 'SeverusSnape',
+  'JonSnow', 'DaenerysTargaryen', 'TyrionLannister', 'AryaStark', 'CerseiLannister',
+  'SherlockHolmes', 'JohnWatson', 'JamesBond', 'IndianaJones', 'KatnissEverdeen',
+  'TonyStark', 'SteveRogers', 'ThorOdinson', 'BruceBanner', 'PeterParker',
+  'ClarkKent', 'BruceWayne', 'DianaPrince', 'MasterChief', 'LaraCroft',
+  'GeraltOfRivia', 'Ciri', 'Yennefer', 'EzioAuditore', 'Kratos',
+  'Neo', 'Trinity', 'Morpheus', 'AgentSmith', 'JohnWick', 'OptimusPrime'
+];
 
 const OnboardingForm: React.FC<{ user: User; onComplete: (updatedProfile: Profile) => void; }> = ({ user, onComplete }) => {
     const [fullName, setFullName] = useState('');
+    const [username, setUsername] = useState('');
     const [geminiApiKey, setGeminiApiKey] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
+    const suggestUsername = () => {
+        const randomName = fictionalNames[Math.floor(Math.random() * fictionalNames.length)];
+        const randomNumber = Math.floor(Math.random() * 90) + 10;
+        setUsername(`${randomName}${randomNumber}`);
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!fullName.trim() || !geminiApiKey.trim()) {
-            setError("Both fields are required.");
+        if (!fullName.trim() || !geminiApiKey.trim() || !username.trim()) {
+            setError("All fields are required.");
             return;
         }
         setLoading(true);
         setError(null);
 
         try {
-            const { data, error: updateError }: PostgrestSingleResponse<Profile> = await supabase
-                .from('profiles')
+            // Check if username is unique
+            const { data: existingUser, error: checkError } = await (supabase
+                .from('profiles') as any)
+                .select('username')
+                .eq('username', username)
+                .single();
+
+            if (checkError && checkError.code !== 'PGRST116') throw checkError; // Don't throw if user not found
+            if (existingUser) {
+                setError('This username is already taken. Please choose another.');
+                setLoading(false);
+                return;
+            }
+
+            const { data, error: updateError } = await (supabase
+                .from('profiles') as any)
                 .update({
                     full_name: fullName,
+                    username: username,
                     gemini_api_key: geminiApiKey,
                 })
                 .eq('id', user.id)
@@ -51,7 +87,7 @@ const OnboardingForm: React.FC<{ user: User; onComplete: (updatedProfile: Profil
             if (updateError) throw updateError;
             
             if (data) {
-                onComplete(data);
+                onComplete(data as Profile);
             }
         } catch (err: any) {
             setError(err.message);
@@ -71,12 +107,29 @@ const OnboardingForm: React.FC<{ user: User; onComplete: (updatedProfile: Profil
                         <input
                             id="fullName"
                             type="text"
-                            placeholder="Your full name"
+                            placeholder="Your full name (private)"
                             value={fullName}
                             onChange={(e) => setFullName(e.target.value)}
                             className="w-full bg-zinc-700 border-2 border-zinc-600 rounded-md p-3 text-white focus:outline-none focus:border-lime-400"
                             required
                         />
+                    </div>
+                     <div>
+                        <label htmlFor="username" className="block text-sm font-bold text-zinc-300 mb-1">Username</label>
+                        <div className="flex items-center gap-2">
+                            <input
+                                id="username"
+                                type="text"
+                                placeholder="Your public username"
+                                value={username}
+                                onChange={(e) => setUsername(e.target.value)}
+                                className="w-full bg-zinc-700 border-2 border-zinc-600 rounded-md p-3 text-white focus:outline-none focus:border-lime-400"
+                                required
+                            />
+                            <button type="button" onClick={suggestUsername} className="p-3 bg-zinc-700 border-2 border-zinc-600 rounded-md text-lime-400 hover:border-lime-400 transition-colors" aria-label="Suggest Username">
+                                <SparklesIcon className="w-6 h-6"/>
+                            </button>
+                        </div>
                     </div>
                     <div>
                         <label htmlFor="geminiApiKey" className="block text-sm font-bold text-zinc-300 mb-1">Gemini API Key</label>
@@ -113,27 +166,47 @@ const OnboardingForm: React.FC<{ user: User; onComplete: (updatedProfile: Profil
 };
 
 const initialApps: (Omit<AppCardProps, 'onSelect'> & { pageId: string; href?: string })[] = [
-    { title: "WatchFinder", pageId: 'watchfinder', description: "AI-powered movie & series recommendations.", icon: <MovieIcon />, hue: 180 },
+    { title: "WatchFinder", pageId: 'watchfinder', description: "I will help you find movies and help you escape the what to watch process", icon: <MovieIcon />, hue: 180 },
     { title: "AI Humanizer", pageId: 'ai-humanizer', description: "Make your AI-written text undetectable.", icon: <HumanizerIcon />, hue: 320 },
-    { title: "AI CV Architect", pageId: 'ai-cv-architect', description: "Build a professional CV from your raw info.", icon: <CvIcon />, hue: 260 },
+    { title: "Cv Expert", pageId: 'ai-cv-architect', description: "1 click cv from a Linkedin Link.", icon: <CvIcon />, hue: 260 },
     { title: "BanglaNutriPlan", pageId: 'bangla-nutri-plan', description: "Personalized Bangladeshi diet plans.", icon: <NutritionIcon />, hue: 30 },
     { title: "Stata Assistant", pageId: 'stata-assistant', description: "Debug & analyze Stata code with AI.", icon: <StataIcon />, hue: 300 },
-    { title: "Shikhok", pageId: 'shikhok', description: "Your AI research assistant for any topic.", icon: <ShikhokIcon />, hue: 50 },
+    { title: "শিক্ষক App", pageId: 'shikhok', description: "Teaches you whole curriculum through exciting podcasts from your College books", icon: <ShikhokIcon />, hue: 50 },
     { title: "Concept Clear", pageId: 'concept-clear', description: "Understand complex topics easily.", icon: <BrainCircuitIcon />, hue: 90 },
     { title: "Kajer List", pageId: 'todo-list', description: "An intelligent to-do list that understands you.", icon: <TodoListIcon/>, hue: 50 },
-    { title: "Thera.py", pageId: 'thera-py', href: "https://therapy-one-psi.vercel.app/", description: "Access external AI therapy service.", icon: <TherapyIcon />, hue: 200 },
+    { title: "Thera.py", pageId: 'thera-py', href: "https://therapy-one-psi.vercel.app/", description: "Confidential Ai Therapist. New login required.", icon: <TherapyIcon />, hue: 200 },
 ];
 
-const AppCard: React.FC<AppCardProps & { playHoverSound: () => void; playClickSound: () => void; isThemed: boolean }> = ({ title, description, icon, onSelect, hue, playHoverSound, playClickSound, isThemed }) => (
+const AppCard: React.FC<AppCardProps & { playHoverSound: () => void; playClickSound: () => void; isThemed: boolean; isPinned: boolean; onTogglePin: () => void; canPin: boolean; }> = ({ title, description, icon, onSelect, hue, playHoverSound, playClickSound, isThemed, isPinned, onTogglePin, canPin }) => (
   <div
     onClick={() => { playClickSound(); onSelect(); }}
     onMouseEnter={playHoverSound}
-    className={`p-4 rounded-lg transition-all duration-200 cursor-pointer flex flex-col h-full
+    className={`relative group p-4 rounded-lg transition-all duration-200 cursor-pointer flex flex-col h-full
       ${isThemed
         ? `bg-black/20 backdrop-blur-sm border-2 border-[hsl(${hue},_70%,_60%)] hover:bg-black/40 hover:shadow-[4px_4px_0px_0px_hsl(${hue},_70%,_60%)]`
         : `bg-zinc-800 border-2 border-[hsl(${hue},_70%,_60%)] hover:shadow-[6px_6px_0px_0px_hsl(${hue},_70%,_60%)] hover:-translate-x-0.5 hover:-translate-y-0.5`
       }`}
   >
+    <button
+        onClick={(e) => {
+            e.stopPropagation();
+            if (isPinned || canPin) {
+                playClickSound();
+                onTogglePin();
+            } else {
+                alert("You can only pin up to 2 apps.");
+            }
+        }}
+        className={`absolute top-2 right-2 p-1.5 rounded-full z-10 transition-all duration-200 
+            ${isPinned 
+                ? 'bg-lime-400/80 text-black' 
+                : 'bg-black/20 text-white/70 opacity-0 group-hover:opacity-100 hover:bg-black/50'}
+            ${!isPinned && !canPin ? 'cursor-not-allowed opacity-50' : ''}
+        `}
+        aria-label={isPinned ? "Unpin app" : "Pin app"}
+    >
+        {isPinned ? <PinSolidIcon className="w-5 h-5"/> : <PinIcon className="w-5 h-5"/>}
+    </button>
     <div className="flex items-center gap-3 mb-2">
       <div className={isThemed ? `text-[hsl(${hue},_70%,_60%)]` : `text-[hsl(${hue},_70%,_60%)]`}>{icon}</div>
       <h2 className={`text-xl font-bold text-white`}>{title}</h2>
@@ -169,8 +242,7 @@ const ThemeSwitcher: React.FC<{
   
   const handleRandom = () => {
     playClickSound();
-    const randomWallpaper = wallpapers[Math.floor(Math.random() * wallpapers.length)];
-    onChange(randomWallpaper);
+    onChange('random');
     setIsOpen(false);
   };
 
@@ -186,8 +258,8 @@ const ThemeSwitcher: React.FC<{
       </button>
       {isOpen && (
         <div className="absolute top-full right-0 mt-2 w-64 bg-zinc-800/80 backdrop-blur-md border-2 border-zinc-600 rounded-lg shadow-2xl p-2 z-20">
-            <button onMouseEnter={playHoverSound} onClick={handleRandom} className="w-full text-left p-2 rounded hover:bg-zinc-700 font-bold text-white">Random</button>
-            <button onMouseEnter={playHoverSound} onClick={() => handleSelect('default')} className={`w-full text-left p-2 rounded font-bold ${current === 'default' ? 'bg-lime-500 text-black' : 'hover:bg-zinc-700 text-white'}`}>Default</button>
+            <button onMouseEnter={playHoverSound} onClick={handleRandom} className={`w-full text-left p-2 rounded font-bold ${current === 'random' ? 'bg-lime-500 text-black' : 'hover:bg-zinc-700 text-white'}`}>Random Rotation</button>
+            <button onMouseEnter={playHoverSound} onClick={() => handleSelect('default')} className={`w-full text-left p-2 rounded font-bold ${current === 'default' ? 'bg-lime-500 text-black' : 'hover:bg-zinc-700 text-white'}`}>Solid Black</button>
             <div className="h-px bg-zinc-600 my-1"></div>
             <div className="max-h-48 overflow-y-auto pr-1">
               <div className="grid grid-cols-3 gap-2">
@@ -211,12 +283,6 @@ const ThemeSwitcher: React.FC<{
 
 type AppDef = (Omit<AppCardProps, 'onSelect'> & { pageId: string; href?: string });
 
-type Prefs = {
-    wallpaper: string | null;
-    app_order: string[] | null;
-    recently_used: string[] | null;
-};
-
 const App: React.FC = () => {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -230,21 +296,36 @@ const App: React.FC = () => {
   const [authError, setAuthError] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [wallpaper, setWallpaper] = useState('default');
+  const [wallpaper, setWallpaper] = useState('random'); // 'default', 'random', or a URL
+  const [currentWallpaperUrl, setCurrentWallpaperUrl] = useState(wallpapers[0]);
   const [apps, setApps] = useState<AppDef[]>(initialApps);
   const [recentlyUsed, setRecentlyUsed] = useState<string[]>([]);
+  const [pinnedApps, setPinnedApps] = useState<string[]>([]);
   const [showOnboarding, setShowOnboarding] = useState(false);
 
   const hoverAudioRef = useRef<HTMLAudioElement>(null);
   const clickAudioRef = useRef<HTMLAudioElement>(null);
+  const wallpaperIntervalRef = useRef<number | null>(null);
   
-  // Drag and drop refs
   const dragItem = useRef<number | null>(null);
   const dragOverItem = useRef<number | null>(null);
 
+  // --- HOOKS ---
+  const { pause: pauseMusic, ...musicPlayerProps } = useMusicPlayer(session);
+  const { 
+      callState,
+      duration: callDuration,
+      initiateCall,
+      answerCall,
+      hangUp,
+      remoteAudioRef,
+      ringtoneAudioRef,
+      ringbackAudioRef,
+  } = useWebRTC(session, pauseMusic);
+
   const playHoverSound = useCallback(() => {
     if (hoverAudioRef.current) {
-      hoverAudioRef.current.volume = 0.5; // Reduce volume by half
+      hoverAudioRef.current.volume = 0.25;
       hoverAudioRef.current.currentTime = 0;
       hoverAudioRef.current.play().catch(e => {});
     }
@@ -280,38 +361,40 @@ const App: React.FC = () => {
   useEffect(() => {
     const fetchProfileAndPrefs = async () => {
       if (session?.user) {
-        const { data, error } = await supabase
-            .from('profiles')
+        const { data, error } = await (supabase
+            .from('profiles') as any)
             .select('*')
             .eq('id', session.user.id)
             .single();
 
         if (error && error.code !== 'PGRST116') {
-            console.error('Error fetching profile', error);
+            console.error('Error fetching profile:', error.message);
         } else {
-            setProfile(data);
-            if (data && (!data.full_name || !data.gemini_api_key)) {
+            const typedData = data as Profile | null;
+            setProfile(typedData);
+            if (typedData && (!typedData.full_name || !typedData.gemini_api_key || !typedData.username)) {
                 setShowOnboarding(true);
             } else {
                 setShowOnboarding(false);
             }
         }
 
-        const { data: prefResult, error: prefError }: PostgrestSingleResponse<Prefs> = await supabase
-            .from('app_hub_preferences')
-            .select('wallpaper, app_order, recently_used')
+        const { data: prefResult, error: prefError } = await (supabase
+            .from('app_hub_preferences') as any)
+            .select('wallpaper, app_order, recently_used, pinned_apps')
             .eq('user_id', session.user.id)
             .single();
-
-        if (prefResult) {
-            const prefs = prefResult;
-            setWallpaper(prefs.wallpaper || 'default');
-            setRecentlyUsed(prefs.recently_used || []);
-            if (prefs.app_order) {
-                const orderedApps = prefs.app_order
+        
+        const typedPrefResult = prefResult as AppHubPreferences | null;
+        if (typedPrefResult) {
+            setWallpaper(typedPrefResult.wallpaper || 'random');
+            setRecentlyUsed(typedPrefResult.recently_used || []);
+            setPinnedApps(typedPrefResult.pinned_apps || []);
+            if (typedPrefResult.app_order) {
+                const orderedApps = typedPrefResult.app_order
                     .map((pageId: string) => initialApps.find(app => app.pageId === pageId))
                     .filter((app: AppDef | undefined): app is AppDef => !!app);
-                const remainingApps = initialApps.filter(app => !prefs.app_order.includes(app.pageId));
+                const remainingApps = initialApps.filter(app => !typedPrefResult.app_order.includes(app.pageId));
                 setApps([...orderedApps, ...remainingApps]);
             } else {
                 setApps(initialApps);
@@ -319,14 +402,40 @@ const App: React.FC = () => {
         } else if (prefError && prefError.code !== 'PGRST116') {
              console.error('Error fetching preferences', prefError);
         } else {
-            setWallpaper('default');
+            setWallpaper('random');
             setRecentlyUsed([]);
+            setPinnedApps([]);
             setApps(initialApps);
         }
       }
     };
     fetchProfileAndPrefs();
   }, [session]);
+
+    // Wallpaper rotation effect
+    useEffect(() => {
+        const rotateWallpaper = () => {
+            const randomWallpaper = wallpapers[Math.floor(Math.random() * wallpapers.length)];
+            setCurrentWallpaperUrl(randomWallpaper);
+        };
+
+        if (wallpaperIntervalRef.current) {
+            clearInterval(wallpaperIntervalRef.current);
+            wallpaperIntervalRef.current = null;
+        }
+
+        if (wallpaper === 'random') {
+            rotateWallpaper(); // Set one immediately
+            wallpaperIntervalRef.current = window.setInterval(rotateWallpaper, 15 * 60 * 1000);
+        }
+
+        return () => {
+            if (wallpaperIntervalRef.current) {
+                clearInterval(wallpaperIntervalRef.current);
+            }
+        };
+    }, [wallpaper]);
+
 
   const handleAuthAction = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -356,10 +465,10 @@ const App: React.FC = () => {
   const handleWallpaperChange = async (newWallpaper: string) => {
       setWallpaper(newWallpaper);
       if (session?.user) {
-          await supabase.from('app_hub_preferences').upsert([{
+          await (supabase.from('app_hub_preferences') as any).upsert({
               user_id: session.user.id,
               wallpaper: newWallpaper,
-          }], { onConflict: 'user_id' });
+          }, { onConflict: 'user_id' });
       }
   };
   
@@ -369,10 +478,10 @@ const App: React.FC = () => {
     if (session?.user) {
         const newRecent = [pageId, ...recentlyUsed.filter(p => p !== pageId)].slice(0, 3);
         setRecentlyUsed(newRecent);
-        await supabase.from('app_hub_preferences').upsert([{
+        await (supabase.from('app_hub_preferences') as any).upsert({
             user_id: session.user.id,
             recently_used: newRecent,
-        }], { onConflict: 'user_id' });
+        }, { onConflict: 'user_id' });
     }
 
     if (selectedApp?.href) {
@@ -381,159 +490,58 @@ const App: React.FC = () => {
         setPage(pageId as Page);
     }
   };
+  
+  const unpinnedApps = apps.filter(app => !pinnedApps.includes(app.pageId));
 
   const handleDragEnd = async () => {
     if (dragItem.current === null || dragOverItem.current === null) return;
 
-    const newAppOrder = [...apps];
-    const draggedItemContent = newAppOrder.splice(dragItem.current, 1)[0];
-    newAppOrder.splice(dragOverItem.current, 0, draggedItemContent);
+    const newUnpinnedAppOrder = [...unpinnedApps];
+    const draggedItemContent = newUnpinnedAppOrder.splice(dragItem.current, 1)[0];
+    newUnpinnedAppOrder.splice(dragOverItem.current, 0, draggedItemContent);
     
     dragItem.current = null;
     dragOverItem.current = null;
 
-    setApps(newAppOrder);
+    const finalFullOrder = [...apps.filter(a => pinnedApps.includes(a.pageId)), ...newUnpinnedAppOrder];
+    setApps(finalFullOrder);
 
     if (session?.user) {
-        const newOrderIds = newAppOrder.map(app => app.pageId);
-        await supabase.from('app_hub_preferences').upsert([{
+        const newOrderIds = finalFullOrder.map(app => app.pageId);
+        await (supabase.from('app_hub_preferences') as any).upsert({
             user_id: session.user.id,
             app_order: newOrderIds,
-        }], { onConflict: 'user_id' });
+        }, { onConflict: 'user_id' });
     }
   };
+  
+  const handleTogglePin = async (pageId: string) => {
+    const isCurrentlyPinned = pinnedApps.includes(pageId);
+    let newPinnedApps: string[];
+
+    if (isCurrentlyPinned) {
+        newPinnedApps = pinnedApps.filter(id => id !== pageId);
+    } else {
+        if (pinnedApps.length >= 2) {
+            alert("You can only pin a maximum of 2 apps.");
+            return;
+        }
+        newPinnedApps = [...pinnedApps, pageId];
+    }
+
+    setPinnedApps(newPinnedApps);
+
+    if (session?.user) {
+        await (supabase.from('app_hub_preferences') as any).upsert({
+            user_id: session.user.id,
+            pinned_apps: newPinnedApps,
+        }, { onConflict: 'user_id' });
+    }
+};
 
   const geminiApiKey = profile?.gemini_api_key || (process.env.API_KEY as string);
   const isThemed = wallpaper !== 'default';
-
-    // --- MUSIC PLAYER STATE & LOGIC ---
-    const [playlist, setPlaylist] = useState<Song[]>([]);
-    const [currentTrackIndex, setCurrentTrackIndex] = useState(0);
-    const [isPlaying, setIsPlaying] = useState(true);
-    const [volume, setVolume] = useState(0.5);
-    const [progress, setProgress] = useState(0);
-    const [duration, setDuration] = useState(0);
-    const [isPlayerExpanded, setIsPlayerExpanded] = useState(false);
-    const [isSongLoading, setIsSongLoading] = useState(true);
-
-    const audioRef = useRef<HTMLAudioElement | null>(null);
-    const preloadAudioRef = useRef<HTMLAudioElement | null>(null);
-
-    // Shuffle playlist on initial load
-    useEffect(() => {
-        setPlaylist(songList.sort(() => 0.5 - Math.random()));
-    }, []);
-
-    const preloadNextTrack = useCallback((trackIndex: number) => {
-        if (preloadAudioRef.current && playlist.length > 0) {
-            const nextIndex = (trackIndex + 1) % playlist.length;
-            preloadAudioRef.current.src = playlist[nextIndex].url;
-            preloadAudioRef.current.load();
-        }
-    }, [playlist]);
-
-    // Initialize player and event listeners
-    useEffect(() => {
-        if (playlist.length === 0 || !session) return;
-
-        const audio = new Audio();
-        audioRef.current = audio;
-        preloadAudioRef.current = new Audio();
-        
-        const setAudioData = () => {
-            setDuration(audio.duration);
-            setProgress(audio.currentTime);
-        };
-        const setAudioTime = () => setProgress(audio.currentTime);
-        const handleEnded = () => handleNext();
-        const handleCanPlay = () => {
-            setIsSongLoading(false);
-            if (isPlaying) {
-                 audio.play().catch(e => console.error("Autoplay failed:", e));
-            }
-        };
-
-        audio.addEventListener('loadedmetadata', setAudioData);
-        audio.addEventListener('timeupdate', setAudioTime);
-        audio.addEventListener('ended', handleEnded);
-        audio.addEventListener('canplay', handleCanPlay);
-        audio.addEventListener('play', () => setIsPlaying(true));
-        audio.addEventListener('pause', () => setIsPlaying(false));
-        audio.volume = volume;
-
-        // Load the first track
-        audio.src = playlist[currentTrackIndex].url;
-        preloadNextTrack(currentTrackIndex);
-        
-        if(isPlaying) {
-          audio.play().catch(e => {
-              console.warn("Autoplay was blocked by the browser. Playback will start on user interaction.");
-              setIsPlaying(false);
-          });
-        }
-
-        return () => {
-            audio.removeEventListener('loadedmetadata', setAudioData);
-            audio.removeEventListener('timeupdate', setAudioTime);
-            audio.removeEventListener('ended', handleEnded);
-            audio.removeEventListener('canplay', handleCanPlay);
-            audio.removeEventListener('play', () => setIsPlaying(true));
-            audio.removeEventListener('pause', () => setIsPlaying(false));
-            audio.pause();
-            if (preloadAudioRef.current) {
-                preloadAudioRef.current.pause();
-            }
-        };
-    }, [playlist, session]);
-    
-    useEffect(() => {
-        if (audioRef.current) {
-            audioRef.current.volume = volume;
-        }
-    }, [volume]);
-
-    const playTrack = useCallback((index: number) => {
-        if (!audioRef.current || !playlist[index]) return;
-        setIsSongLoading(true);
-        setCurrentTrackIndex(index);
-        audioRef.current.src = playlist[index].url;
-        audioRef.current.play().catch(e => console.error("Play failed:", e));
-        preloadNextTrack(index);
-        setIsPlaying(true);
-    }, [playlist, preloadNextTrack]);
-
-    const handlePlayPause = () => {
-        if (!audioRef.current) return;
-        if (isPlaying) {
-            audioRef.current.pause();
-        } else {
-            audioRef.current.play().catch(e => console.error("Play failed:", e));
-        }
-        setIsPlaying(!isPlaying);
-    };
-
-    const handleNext = useCallback(() => {
-        const nextIndex = (currentTrackIndex + 1) % playlist.length;
-        playTrack(nextIndex);
-    }, [currentTrackIndex, playlist.length, playTrack]);
-
-    const handlePrev = () => {
-        const prevIndex = (currentTrackIndex - 1 + playlist.length) % playlist.length;
-        playTrack(prevIndex);
-    };
-    
-    const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const newVolume = parseFloat(e.target.value);
-        setVolume(newVolume);
-    };
-    
-    const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if(audioRef.current) {
-            audioRef.current.currentTime = parseFloat(e.target.value);
-            setProgress(parseFloat(e.target.value));
-        }
-    };
-
+  const finalWallpaperUrl = wallpaper === 'random' ? currentWallpaperUrl : wallpaper;
 
   const renderPage = () => {
     switch (page) {
@@ -596,6 +604,7 @@ const App: React.FC = () => {
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full bg-zinc-700 border-2 border-zinc-600 rounded-md p-3 text-white focus:outline-none focus:border-lime-400"
                 required
+                autoComplete="email"
               />
               <div className="relative">
                 <input
@@ -658,6 +667,12 @@ const App: React.FC = () => {
   const recentAppObjects = recentlyUsed
       .map(pageId => initialApps.find(app => app.pageId === pageId))
       .filter((app): app is AppDef => !!app);
+      
+  const pinnedAppObjects = pinnedApps
+      .map(pageId => initialApps.find(app => app.pageId === pageId))
+      .filter((app): app is AppDef => !!app);
+  
+  const canPinMore = pinnedApps.length < 2;
   
   const imageGenLinks = [
     { href: 'https://huggingface.co/spaces/black-forest-labs/FLUX.1-dev', title: 'High quality', description: 'FLUX.1-dev' },
@@ -699,69 +714,95 @@ const App: React.FC = () => {
        <audio ref={hoverAudioRef} src={hoverSound} preload="auto"></audio>
        <audio ref={clickAudioRef} src={clickSound} preload="auto"></audio>
        
-       {playlist.length > 0 && (
+       {musicPlayerProps.playlist.length > 0 && (
            <div className={`fixed top-1/2 -translate-y-1/2 left-4 z-50 transition-transform duration-300 ease-in-out ${page !== 'hub' ? '-translate-x-full focus-within:translate-x-0 hover:translate-x-0' : ''}`}>
                <MusicPlayer
-                   isExpanded={isPlayerExpanded}
-                   onToggleExpand={() => setIsPlayerExpanded(!isPlayerExpanded)}
+                   isExpanded={musicPlayerProps.isPlayerExpanded}
+                   onToggleExpand={() => musicPlayerProps.setIsPlayerExpanded(!musicPlayerProps.isPlayerExpanded)}
                    onGoToHub={() => setPage('hub')}
-                   playlist={playlist}
-                   currentTrack={playlist[currentTrackIndex]}
-                   currentTrackIndex={currentTrackIndex}
-                   isPlaying={isPlaying}
-                   onPlayPause={handlePlayPause}
-                   onNext={handleNext}
-                   onPrev={handlePrev}
-                   onSelectTrack={playTrack}
-                   volume={volume}
-                   onVolumeChange={handleVolumeChange}
-                   progress={progress}
-                   duration={duration}
-                   onSeek={handleSeek}
-                   isLoading={isSongLoading}
+                   currentTrack={musicPlayerProps.playlist[musicPlayerProps.currentTrackIndex]}
+                   {...musicPlayerProps}
                />
            </div>
        )}
 
-       <Chat user={session.user} profile={profile} />
+       <Chat user={session.user} profile={profile!} initiateCall={initiateCall}/>
        
+       {callState.status !== 'idle' && (
+           <CallCapsule
+               callState={callState}
+               duration={callDuration}
+               onAnswer={answerCall}
+               onHangUp={hangUp}
+               onDecline={hangUp}
+           />
+       )}
+       <audio ref={ringtoneAudioRef} src="https://res.cloudinary.com/dy80ftu9k/video/upload/v1755296718/Untitled_3_mp3cut.net_u8mk54.mp3" preload="auto" loop></audio>
+       <audio ref={ringbackAudioRef} src="https://res.cloudinary.com/dy80ftu9k/video/upload/v1755301549/phone-calling-144220_h5wprh.mp3" preload="auto" loop></audio>
+       <audio ref={remoteAudioRef} autoPlay playsInline />
+
        <div
          className="min-h-screen bg-cover bg-center bg-fixed transition-all duration-500"
          style={{
-           backgroundImage: isThemed ? `url(${wallpaper})` : 'none',
+           backgroundImage: isThemed ? `url(${finalWallpaperUrl})` : 'none',
            backgroundColor: isThemed ? 'transparent' : '#18181b'
          }}
        >
          <div className={`min-h-screen transition-colors duration-500 ${isThemed ? 'bg-black/50' : ''}`}>
            {page === 'hub' ? (
-             <div className={`container mx-auto px-4 py-8 transition-all duration-300 ease-in-out ${isPlayerExpanded ? 'pl-72' : 'pl-24'}`}>
-               <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
-                  <div className="flex items-center gap-4">
-                    <div className="w-14 h-14 rounded-full border-2 border-lime-400 bg-zinc-800 flex items-center justify-center flex-shrink-0">
-                        {profile?.avatar_url ? (
-                            <img src={profile.avatar_url} alt="User Avatar" className="w-full h-full rounded-full object-cover" />
-                        ) : (
-                            <UserIcon className="w-8 h-8 text-lime-400" />
-                        )}
-                    </div>
-                   <div>
-                      <h1 className="text-3xl font-bold text-white">Welcome, {profile?.full_name || profile?.username || "User"}!</h1>
-                      <p className="text-zinc-400">What will you create today?</p>
-                   </div>
+             <div className={`container mx-auto px-4 py-8 transition-all duration-300 ease-in-out ${musicPlayerProps.isPlayerExpanded ? 'pl-72' : 'pl-24'}`}>
+               <header className="flex flex-col sm:flex-row sm:justify-between items-center mb-8 gap-4">
+                  {/* Welcome Group */}
+                  <div className="w-full sm:w-auto flex items-center gap-4 order-1 sm:order-none">
+                      <div className="w-14 h-14 rounded-full border-2 border-lime-400 bg-zinc-800 flex items-center justify-center flex-shrink-0">
+                          {profile?.avatar_url ? (
+                              <img src={profile.avatar_url} alt="User Avatar" className="w-full h-full rounded-full object-cover" />
+                          ) : (
+                              <UserIcon className="w-8 h-8 text-lime-400" />
+                          )}
+                      </div>
+                     <div>
+                        <h1 className="text-3xl font-bold text-white">Welcome, {profile?.full_name?.split(' ')[0] || profile?.username || "User"}!</h1>
+                        <p className="text-zinc-400">What will you create today?</p>
+                     </div>
                   </div>
-                 <div className="flex items-center gap-2 sm:gap-4 self-end sm:self-center">
-                    <button
-                        onClick={() => { playClickSound(); setPage('gemini-bangla'); }}
-                        onMouseEnter={playHoverSound}
-                        className="px-4 py-2 bg-zinc-800/50 border-2 border-lime-400 rounded-lg hover:bg-zinc-700/70 transition-colors shadow-lg backdrop-blur-sm flex items-center gap-2 text-white font-bold"
-                    >
-                        <ChatBubbleIcon className="w-6 h-6 text-lime-400" />
-                        Gemini Bangla
-                    </button>
-                   <button onClick={() => { playClickSound(); setPage('settings'); }} onMouseEnter={playHoverSound} className="p-3 bg-zinc-800/50 border-2 border-lime-400 rounded-full hover:bg-zinc-700/70 transition-colors shadow-lg backdrop-blur-sm"><GearIcon className="w-6 h-6 text-lime-400" /></button>
-                   <ThemeSwitcher current={wallpaper} onChange={handleWallpaperChange} playHoverSound={playHoverSound} playClickSound={playClickSound} />
-                 </div>
+                  {/* Controls Group */}
+                  <div className="w-full sm:w-auto flex justify-end order-2 sm:order-none">
+                      <div className="flex items-center gap-2 sm:gap-4">
+                           <button
+                              onClick={() => { playClickSound(); setPage('gemini-bangla'); }}
+                              onMouseEnter={playHoverSound}
+                              className="px-4 py-2 bg-zinc-800/50 border-2 border-lime-400 rounded-lg hover:bg-zinc-700/70 transition-colors shadow-lg backdrop-blur-sm flex items-center gap-2 text-white font-bold"
+                          >
+                              <ChatBubbleIcon className="w-6 h-6 text-lime-400" />
+                              <span className="hidden sm:inline">Gemini Bangla</span>
+                          </button>
+                         <button onClick={() => { playClickSound(); setPage('settings'); }} onMouseEnter={playHoverSound} className="p-3 bg-zinc-800/50 border-2 border-lime-400 rounded-full hover:bg-zinc-700/70 transition-colors shadow-lg backdrop-blur-sm" aria-label="Settings"><GearIcon className="w-6 h-6 text-lime-400" /></button>
+                         <ThemeSwitcher current={wallpaper} onChange={handleWallpaperChange} playHoverSound={playHoverSound} playClickSound={playClickSound} />
+                      </div>
+                  </div>
                </header>
+                
+                {pinnedAppObjects.length > 0 && (
+                  <div className="mb-12">
+                      <h2 className="text-2xl font-bold text-white mb-4">Pinned Apps</h2>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                          {pinnedAppObjects.map(app => (
+                              <AppCard
+                                  key={`pinned-${app.pageId}`}
+                                  {...app}
+                                  onSelect={() => handleAppSelect(app.pageId)}
+                                  playHoverSound={playHoverSound}
+                                  playClickSound={playClickSound}
+                                  isThemed={isThemed}
+                                  isPinned={true}
+                                  onTogglePin={() => handleTogglePin(app.pageId)}
+                                  canPin={canPinMore}
+                              />
+                          ))}
+                      </div>
+                  </div>
+                )}
                 
                 {recentAppObjects.length > 0 && (
                   <div className="mb-12">
@@ -775,6 +816,9 @@ const App: React.FC = () => {
                                   playHoverSound={playHoverSound}
                                   playClickSound={playClickSound}
                                   isThemed={isThemed}
+                                  isPinned={pinnedApps.includes(app.pageId)}
+                                  onTogglePin={() => handleTogglePin(app.pageId)}
+                                  canPin={canPinMore}
                               />
                           ))}
                       </div>
@@ -783,7 +827,7 @@ const App: React.FC = () => {
                 
                 <h2 className="text-2xl font-bold text-white mb-4">All Apps</h2>
                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                 {apps.map((app, index) => (
+                 {unpinnedApps.map((app, index) => (
                    <div
                     key={app.pageId}
                     draggable
@@ -799,6 +843,9 @@ const App: React.FC = () => {
                        playHoverSound={playHoverSound}
                        playClickSound={playClickSound}
                        isThemed={isThemed}
+                       isPinned={false}
+                       onTogglePin={() => handleTogglePin(app.pageId)}
+                       canPin={canPinMore}
                      />
                    </div>
                  ))}
