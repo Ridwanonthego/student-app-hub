@@ -26,10 +26,11 @@ import { ChatUser } from './apps/chat/types';
 // --- WebRTC Call Capsule Component ---
 const CallCapsule: React.FC<{
     callState: any;
+    duration: number;
     onAnswer: () => void;
     onHangUp: () => void;
     onDecline: () => void;
-}> = ({ callState, onAnswer, onHangUp, onDecline }) => {
+}> = ({ callState, duration, onAnswer, onHangUp, onDecline }) => {
     const capsuleRef = useRef<HTMLDivElement>(null);
     const [position, setPosition] = useState({ x: 20, y: 80 });
     const isDragging = useRef(false);
@@ -65,12 +66,18 @@ const CallCapsule: React.FC<{
             document.removeEventListener('mouseup', onMouseUp);
         };
     }, []);
+    
+    const formatDuration = (seconds: number) => {
+        const minutes = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        return `${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    };
 
     const getStatusInfo = () => {
         switch (callState.status) {
-            case 'outgoing': return { color: 'bg-yellow-500', text: `Calling ${callState.peer?.username}...` };
+            case 'outgoing': return { color: 'bg-yellow-500', text: `Ringing ${callState.peer?.username}...` };
             case 'incoming': return { color: 'bg-yellow-500', text: `Incoming call from ${callState.peer?.username}` };
-            case 'connected': return { color: 'bg-green-500', text: `In call with ${callState.peer?.username}` };
+            case 'connected': return { color: 'bg-green-500', text: `In call with ${callState.peer?.username} (${formatDuration(duration)})` };
             case 'disconnected': return { color: 'bg-red-500', text: 'Call ended' };
             default: return { color: 'bg-zinc-500', text: 'Idle' };
         }
@@ -742,9 +749,32 @@ const App: React.FC = () => {
         peer: ChatUser | null;
         localStream: MediaStream | null;
     }>({ status: 'idle', peer: null, localStream: null });
+    const [callDuration, setCallDuration] = useState(0);
     const peerConnection = useRef<RTCPeerConnection | null>(null);
     const remoteAudioRef = useRef<HTMLAudioElement>(null);
     const ringtoneAudioRef = useRef<HTMLAudioElement>(null);
+    const ringbackAudioRef = useRef<HTMLAudioElement>(null);
+    const callTimerRef = useRef<number | null>(null);
+    const iceCandidatesBuffer = useRef<RTCIceCandidateInit[]>([]);
+    
+    useEffect(() => {
+        if (callState.status === 'connected') {
+            callTimerRef.current = window.setInterval(() => {
+                setCallDuration(prev => prev + 1);
+            }, 1000);
+        } else {
+            if (callTimerRef.current) {
+                clearInterval(callTimerRef.current);
+                callTimerRef.current = null;
+            }
+            if (callState.status === 'idle' || callState.status === 'disconnected') {
+                setCallDuration(0);
+            }
+        }
+        return () => {
+            if (callTimerRef.current) clearInterval(callTimerRef.current);
+        };
+    }, [callState.status]);
 
     const playRingtone = useCallback(() => {
         if (ringtoneAudioRef.current) {
@@ -760,6 +790,20 @@ const App: React.FC = () => {
         }
     }, []);
     
+    const playRingback = useCallback(() => {
+        if (ringbackAudioRef.current) {
+            ringbackAudioRef.current.currentTime = 0;
+            ringbackAudioRef.current.play().catch(e => console.error("Ringback playback failed", e));
+        }
+    }, []);
+
+    const stopRingback = useCallback(() => {
+        if (ringbackAudioRef.current) {
+            ringbackAudioRef.current.pause();
+            ringbackAudioRef.current.currentTime = 0;
+        }
+    }, []);
+    
     const sendSignal = async (receiverId: string, type: string, payload: any) => {
         await (supabase.from('webrtc_signals') as any).insert({
             sender_id: session!.user.id,
@@ -771,6 +815,8 @@ const App: React.FC = () => {
     
     const cleanupCall = useCallback(() => {
         stopRingtone();
+        stopRingback();
+        iceCandidatesBuffer.current = [];
         if (peerConnection.current) {
             peerConnection.current.close();
             peerConnection.current = null;
@@ -780,7 +826,20 @@ const App: React.FC = () => {
         }
         setCallState({ status: 'disconnected', peer: callState.peer, localStream: null });
         setTimeout(() => setCallState({ status: 'idle', peer: null, localStream: null }), 2000);
-    }, [callState.localStream, callState.peer, stopRingtone]);
+    }, [callState.localStream, callState.peer, stopRingtone, stopRingback]);
+    
+    const processIceCandidatesBuffer = useCallback(async () => {
+        if (peerConnection.current && iceCandidatesBuffer.current.length > 0) {
+            for (const candidate of iceCandidatesBuffer.current) {
+                try {
+                    await peerConnection.current.addIceCandidate(new RTCIceCandidate(candidate));
+                } catch (e) {
+                    console.error("Error adding buffered ICE candidate", e);
+                }
+            }
+            iceCandidatesBuffer.current = [];
+        }
+    }, []);
 
 
     const initiateCall = async (peer: ChatUser) => {
@@ -789,7 +848,7 @@ const App: React.FC = () => {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             setCallState({ status: 'outgoing', peer, localStream: stream });
-            playRingtone();
+            playRingback();
 
             const pc = new RTCPeerConnection();
             peerConnection.current = pc;
@@ -823,7 +882,6 @@ const App: React.FC = () => {
         if (callState.status !== 'incoming' || !peerConnection.current) return;
         stopRingtone();
         
-        // This user gesture allows us to play the remote audio, which may already be attached.
         remoteAudioRef.current?.play().catch(e => console.error("Remote audio play failed on answer", e));
 
         try {
@@ -875,27 +933,34 @@ const App: React.FC = () => {
                 };
 
                 await newPc.setRemoteDescription(new RTCSessionDescription(signal.payload.offer));
+                await processIceCandidatesBuffer();
                 setCallState({ status: 'incoming', peer: callerProfile as ChatUser, localStream: null });
                 playRingtone();
                 break;
             
             case 'answer':
-                if (pc) await pc.setRemoteDescription(new RTCSessionDescription(signal.payload.answer));
-                stopRingtone();
+                if (pc) {
+                    await pc.setRemoteDescription(new RTCSessionDescription(signal.payload.answer));
+                    await processIceCandidatesBuffer();
+                }
+                stopRingback();
                 setCallState(prev => ({...prev, status: 'connected' }));
-                // For the caller, now that the connection is established, try to play the remote audio.
                 remoteAudioRef.current?.play().catch(e => console.error("Remote audio play failed for caller", e));
                 break;
             
             case 'ice-candidate':
-                if (pc) await pc.addIceCandidate(new RTCIceCandidate(signal.payload.candidate));
+                if (pc && pc.remoteDescription) {
+                    await pc.addIceCandidate(new RTCIceCandidate(signal.payload.candidate));
+                } else {
+                    iceCandidatesBuffer.current.push(signal.payload.candidate);
+                }
                 break;
             
             case 'hang-up':
                 cleanupCall();
                 break;
         }
-    }, [session?.user, cleanupCall, playRingtone, stopRingtone]);
+    }, [session?.user, cleanupCall, playRingtone, stopRingtone, stopRingback, processIceCandidatesBuffer]);
 
     useEffect(() => {
         if (!session?.user?.id) return;
@@ -1115,13 +1180,15 @@ const App: React.FC = () => {
        {callState.status !== 'idle' && (
            <CallCapsule
                callState={callState}
+               duration={callDuration}
                onAnswer={answerCall}
                onHangUp={hangUp}
                onDecline={hangUp}
            />
        )}
        <audio ref={ringtoneAudioRef} src="https://res.cloudinary.com/dy80ftu9k/video/upload/v1755296718/Untitled_3_mp3cut.net_u8mk54.mp3" preload="auto" loop></audio>
-       <audio ref={remoteAudioRef} />
+       <audio ref={ringbackAudioRef} src="https://www.soundjay.com/phone-sounds/phone-ringback-1.mp3" preload="auto" loop></audio>
+       <audio ref={remoteAudioRef} autoPlay playsInline />
 
        <div
          className="min-h-screen bg-cover bg-center bg-fixed transition-all duration-500"
