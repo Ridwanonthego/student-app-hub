@@ -1,4 +1,3 @@
-
 export type Json =
   | string
   | number
@@ -7,16 +6,15 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[]
 
-export type Database = {
+export interface Database {
   public: {
     Tables: {
       app_hub_preferences: {
         Row: {
           user_id: string
-          app_order: string[]
-          recently_used: string[]
-          wallpaper: string
-          pinned_apps: string[]
+          app_order: string[] | null
+          recently_used: string[] | null
+          wallpaper: string | null
           updated_at: string | null
         }
         Insert: {
@@ -24,7 +22,6 @@ export type Database = {
           app_order?: string[] | null
           recently_used?: string[] | null
           wallpaper?: string | null
-          pinned_apps?: string[] | null
           updated_at?: string | null
         }
         Update: {
@@ -32,7 +29,6 @@ export type Database = {
           app_order?: string[] | null
           recently_used?: string[] | null
           wallpaper?: string | null
-          pinned_apps?: string[] | null
           updated_at?: string | null
         }
         Relationships: [
@@ -123,27 +119,21 @@ export type Database = {
           id: number
           sender_id: string
           receiver_id: string
-          content: string | null
-          message_type: string
-          payload: Json | null
+          content: string
           created_at: string
         }
         Insert: {
           id?: number
           sender_id: string
           receiver_id: string
-          content?: string | null
-          message_type?: string
-          payload?: Json | null
+          content: string
           created_at?: string
         }
         Update: {
           id?: number
           sender_id?: string
           receiver_id?: string
-          content?: string | null
-          message_type?: string
-          payload?: Json | null
+          content?: string
           created_at?: string
         }
         Relationships: [
@@ -233,12 +223,12 @@ export type Database = {
       profiles: {
         Row: {
           avatar_url: string | null
-          full_name: string
-          gemini_api_key: string
+          full_name: string | null
+          gemini_api_key: string | null
           hugging_face_key: string | null
           id: string
           updated_at: string | null
-          username: string
+          username: string | null
           website: string | null
         }
         Insert: {
@@ -261,7 +251,15 @@ export type Database = {
           username?: string | null
           website?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "profiles_id_fkey"
+            columns: ["id"]
+            isOneToOne: true
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          }
+        ]
       }
       todo_tasks: {
         Row: {
@@ -409,48 +407,6 @@ export type Database = {
           {
             foreignKeyName: "watchfinder_ratings_user_id_fkey"
             columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          }
-        ]
-      }
-      webrtc_signals: {
-        Row: {
-          id: number
-          sender_id: string
-          receiver_id: string
-          signal_type: string
-          payload: Json
-          created_at: string
-        }
-        Insert: {
-          id?: number
-          sender_id: string
-          receiver_id: string
-          signal_type: string
-          payload: Json
-          created_at?: string
-        }
-        Update: {
-          id?: number
-          sender_id?: string
-          receiver_id?: string
-          signal_type?: string
-          payload?: Json
-          created_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "webrtc_signals_receiver_id_fkey"
-            columns: ["receiver_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "webrtc_signals_sender_id_fkey"
-            columns: ["sender_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]

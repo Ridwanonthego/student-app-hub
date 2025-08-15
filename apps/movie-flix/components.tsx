@@ -1,12 +1,10 @@
 
 
 import React, { useState, useEffect } from 'react';
-import { SearchBarProps, ChatboxProps, MediaCardProps, MediaGridProps, MediaDetailViewProps, TasteProfileModalProps, FilterModalProps, Media, MovieDetails, TvShowDetails, Genre, DiscoverFilters, TasteProfile, Language, UserSearchModalProps } from './types';
+import { SearchBarProps, ChatboxProps, MediaCardProps, MediaGridProps, MediaDetailViewProps, TasteProfileModalProps, FilterModalProps, Media, MovieDetails, TvShowDetails, Genre, DiscoverFilters, TasteProfile, Language } from './types';
 import { getGenreName } from './services';
-import { StarIcon, SparklesIcon, CloseIcon, PlayIcon, DownloadIcon, FilterIcon, CheckIcon, StarOutlineIcon, ThumbsUpIcon, ThumbsUpSolidIcon, ThumbsDownIcon, ThumbsDownSolidIcon, UserIcon, SearchIcon, SpinnerIcon } from '../../components/Icons';
+import { StarIcon, SparklesIcon, CloseIcon, PlayIcon, DownloadIcon, FilterIcon, CheckIcon, StarOutlineIcon, ThumbsUpIcon, ThumbsUpSolidIcon, ThumbsDownIcon, ThumbsDownSolidIcon } from '../../components/Icons';
 import Loader from '../../components/Loader';
-import { supabase } from '../../supabase/client';
-import { ChatUser } from '../chat/types';
 
 const TMDB_IMAGE_URL = 'https://image.tmdb.org/t/p/w500';
 
@@ -84,14 +82,14 @@ export const MediaCard: React.FC<MediaCardProps> = ({ media, onSelect }) => {
             aria-label={`View details for ${title}`}
         >
             <div className="relative">
-                <img src={posterSrc} alt={`Poster for ${title}`} className="w-full h-64 sm:h-72 lg:h-80 object-cover" />
+                <img src={posterSrc} alt={`Poster for ${title}`} className="w-full h-80 object-cover" />
                 <div className="absolute top-2 right-2 bg-black/70 p-2 rounded-md flex items-center gap-1.5 backdrop-blur-sm">
                     <StarIcon />
                     <span className="text-white font-bold text-sm">{media.vote_average ? media.vote_average.toFixed(1) : 'N/A'}</span>
                 </div>
             </div>
             <div className="p-4">
-                <h3 className="text-white font-bold text-base sm:text-lg truncate" title={title}>{title}</h3>
+                <h3 className="text-white font-bold text-lg truncate" title={title}>{title}</h3>
                 <div className="flex justify-between items-center mt-2 text-sm text-slate-400">
                     <span>{releaseDate ? releaseDate.substring(0, 4) : 'Unknown'}</span>
                     <span className="border border-slate-600 text-slate-300 rounded-full px-2 py-0.5 text-xs">{media.genre_ids && media.genre_ids.length > 0 ? getGenreName(media.genre_ids[0]) : 'Media'}</span>
@@ -107,7 +105,7 @@ export const MediaGrid: React.FC<MediaGridProps> = ({ title, media, isLoading, o
         {title && <h2 className="text-3xl font-bold text-white border-l-4 border-cyan-400 pl-4 mb-6">{title}</h2>}
         {isLoading && media.length === 0 && <Loader className="border-cyan-400" />}
         {!isLoading && media.length === 0 && <p className="text-slate-400 text-center py-8">No items found.</p>}
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
             {media.map(item => <MediaCard key={`${item.media_type}-${item.id}`} media={item} onSelect={onSelectMedia} />)}
         </div>
     </section>
@@ -124,7 +122,7 @@ const DetailItem: React.FC<{ label: string; value?: string | number | null }> = 
   ) : null
 );
 
-export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media, onClose, onToggleFavorite, isFavorite, onToggleLike, isLiked, onToggleDislike, isDisliked, onWatchWithFriend }) => {
+export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media, onClose, onToggleFavorite, isFavorite, onToggleLike, isLiked, onToggleDislike, isDisliked }) => {
   const isMovie = media.media_type === 'movie';
   const title = isMovie ? (media as MovieDetails).title : (media as TvShowDetails).name;
   const releaseDate = isMovie ? (media as MovieDetails).release_date : (media as TvShowDetails).first_air_date;
@@ -191,11 +189,6 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media, onClose
                            {!isMovie && <DetailItem label="Seasons" value={(media as TvShowDetails).number_of_seasons} />}
                            {!isMovie && <DetailItem label="Episodes" value={(media as TvShowDetails).number_of_episodes} />}
                       </div>
-                       <div className="mt-6 pt-6 border-t border-slate-700">
-                            <button onClick={onWatchWithFriend} className="w-full bg-purple-600 text-white font-bold p-3 rounded-md hover:bg-purple-700 transition-colors flex items-center justify-center gap-2">
-                                <UserIcon /> Watch with Friend
-                            </button>
-                       </div>
                   </div>
               </div>
 
@@ -281,80 +274,6 @@ const TagInput: React.FC<TagInputProps> = ({ tags, onTagsChange, placeholder }) 
                 placeholder={placeholder}
                 className="w-full bg-slate-900 border-2 border-slate-600 rounded-md p-2 text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 transition-colors"
             />
-        </div>
-    );
-};
-
-// --- UserSearchModal Component ---
-export const UserSearchModal: React.FC<UserSearchModalProps> = ({ isOpen, onClose, currentUserId, onSendInvite }) => {
-    const [query, setQuery] = useState('');
-    const [results, setResults] = useState<ChatUser[]>([]);
-    const [loading, setLoading] = useState(false);
-
-    useEffect(() => {
-        if (!isOpen) {
-            setQuery('');
-            setResults([]);
-            return;
-        }
-        
-        const searchUsers = async () => {
-            if (query.trim().length < 2) {
-                setResults([]);
-                return;
-            }
-            setLoading(true);
-            const { data, error } = await (supabase
-                .from('profiles') as any)
-                .select('id, username, full_name, avatar_url')
-                .ilike('username', `%${query}%`)
-                .neq('id', currentUserId)
-                .limit(5);
-
-            if (!error) {
-                setResults((data as ChatUser[]) || []);
-            }
-            setLoading(false);
-        };
-        
-        const debounce = setTimeout(() => searchUsers(), 300);
-        return () => clearTimeout(debounce);
-
-    }, [query, isOpen, currentUserId]);
-
-    if (!isOpen) return null;
-
-    return (
-        <div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4" onClick={onClose}>
-            <div className="bg-slate-800 border-2 border-purple-400 rounded-lg shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
-                <div className="p-4 border-b border-slate-700">
-                    <h3 className="font-bold text-white text-lg">Invite a Friend to Watch</h3>
-                    <div className="relative mt-2">
-                        <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400"/>
-                        <input
-                            type="text"
-                            value={query}
-                            onChange={(e) => setQuery(e.target.value)}
-                            placeholder="Search by username..."
-                            className="w-full bg-slate-900 border-2 border-slate-600 rounded-md p-2 pl-10 text-white focus:outline-none focus:border-purple-400"
-                            autoFocus
-                        />
-                    </div>
-                </div>
-                <div className="p-2 max-h-64 overflow-y-auto">
-                    {loading && <div className="flex justify-center p-4"><SpinnerIcon className="text-purple-400"/></div>}
-                    {!loading && results.map(user => (
-                        <div key={user.id} onClick={() => onSendInvite(user)} className="p-2 flex items-center gap-3 hover:bg-slate-700 rounded-md cursor-pointer">
-                            <img src={user.avatar_url} alt={user.username} className="w-10 h-10 rounded-full bg-slate-700"/>
-                            <div>
-                                <p className="font-bold text-white">{user.username}</p>
-                                <p className="text-sm text-slate-400">{user.full_name}</p>
-                            </div>
-                        </div>
-                    ))}
-                    {!loading && query.length > 1 && results.length === 0 && <p className="text-center text-slate-500 p-4">No users found.</p>}
-                </div>
-            </div>
         </div>
     );
 };

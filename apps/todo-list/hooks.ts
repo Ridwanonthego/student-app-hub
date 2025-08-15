@@ -1,5 +1,4 @@
 
-
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../supabase/client';
 import { Task, Priority, Status } from './types';
@@ -14,8 +13,8 @@ export const useTasks = (user: User) => {
         setLoading(true);
         setError(null);
         try {
-            const { data, error } = await (supabase
-                .from('todo_tasks') as any)
+            const { data, error } = await supabase
+                .from('todo_tasks')
                 .select('*')
                 .eq('user_id', user.id)
                 .order('created_at', { ascending: false });
@@ -69,7 +68,7 @@ export const useTasks = (user: User) => {
     const deleteTask = async (id: string, permanent: boolean = false) => {
         if (permanent) {
              try {
-                const { error } = await (supabase.from('todo_tasks') as any).delete().eq('id', id);
+                const { error } = await supabase.from('todo_tasks').delete().eq('id', id);
                 if (error) throw error;
                 setTasks(prev => prev.filter(task => task.id !== id));
             } catch (e: any) {

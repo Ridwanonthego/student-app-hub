@@ -105,10 +105,6 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
               </button>
               <button onClick={onNext} className="p-1 hover:bg-white/20 rounded-full transition-colors disabled:opacity-50" disabled={isLoading} aria-label="Next track"><NextTrackIcon className="w-5 h-5" /></button>
             </div>
-
-            <button onClick={onGoToHub} className="p-1.5 hover:bg-white/20 rounded-full" aria-label="Go to Hub">
-                <HomeIcon className="w-5 h-5" />
-            </button>
         </div>
 
         {/* Song Info & Progress Bar (Bottom) */}

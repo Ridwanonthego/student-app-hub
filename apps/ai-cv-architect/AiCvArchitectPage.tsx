@@ -41,8 +41,8 @@ const AiCvArchitectPage: React.FC<AiCvArchitectPageProps> = ({ onNavigateBack, a
     useEffect(() => {
         const fetchCvData = async () => {
             if (!user) return;
-            const { data, error } = await (supabase
-                .from('cv_data') as any)
+            const { data, error } = await supabase
+                .from('cv_data')
                 .select('raw_info, linkedin_url, image_url')
                 .eq('id', user.id)
                 .single();

@@ -1,5 +1,4 @@
-
-import { URL, fileURLToPath } from 'url';
+import path from 'path';
 import { defineConfig, loadEnv } from 'vite';
 
 export default defineConfig(({ mode }) => {
@@ -11,7 +10,7 @@ export default defineConfig(({ mode }) => {
       },
       resolve: {
         alias: {
-          '@': fileURLToPath(new URL('.', import.meta.url)),
+          '@': path.resolve(__dirname, '.'),
         }
       }
     };

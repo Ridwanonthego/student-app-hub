@@ -1,9 +1,7 @@
-
-
 import { User } from "@supabase/supabase-js";
 import React from "react";
 
-export type View = 'meal-plan' | 'grocery-list' | 'ai-tools';
+export type View = 'meal-plan' | 'grocery-list';
 
 export interface Meal {
     id: string;
@@ -110,9 +108,4 @@ export interface OnboardingModalProps {
     onClose: () => void;
     onSave: (profile: NutriProfile) => void;
     isLoading: boolean;
-}
-
-export interface BottomNavBarProps {
-    activeTab: View;
-    onTabChange: (tab: View) => void;
 }

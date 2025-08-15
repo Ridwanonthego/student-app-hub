@@ -1,14 +1,12 @@
 
-
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Media, MediaDetails, Movie, TvShow, DiscoverFilters, Genre, Language, TasteProfile, Favorite, RatedItem } from './types';
 import { searchMedia, getMediaDetails, getNowPlayingMovies, getPopularTvShows, getPopularAnime, getMovieGenres, getTvGenres, getLanguages, discoverMedia, getUpcomingMovies, getPopularInBDMovies, getPopularHindiMovies } from './services';
 import { getMediaRecommendationsFromAI, getFavoritesFromAI } from './gemini-service';
-import { SearchBar, Chatbox, MediaGrid, MediaDetailView, TasteProfileModal, FilterModal, UserSearchModal } from './components';
+import { SearchBar, Chatbox, MediaGrid, MediaDetailView, TasteProfileModal, FilterModal } from './components';
 import { BackArrowIcon, TuneIcon, FilterIcon, CloseIcon } from '../../components/Icons';
 import Loader from '../../components/Loader';
 import { supabase } from '../../supabase/client';
-import { ChatUser } from '../chat/types';
 
 const defaultTasteProfile: TasteProfile = {
   favoriteGenres: [],
@@ -68,8 +66,6 @@ const WatchFinderPage: React.FC<WatchFinderPageProps> = ({ onNavigateBack, apiKe
   const [tasteProfile, setTasteProfile] = useState<TasteProfile>(defaultTasteProfile);
   const [activeFilters, setActiveFilters] = useState<DiscoverFilters | null>(null);
   const [mediaTypeFilter, setMediaTypeFilter] = useState<'all' | 'movie' | 'tv'>('all');
-  const [isUserSearchModalOpen, setIsUserSearchModalOpen] = useState(false);
-
 
   // Error State
   const [error, setError] = useState<string | null>(null);
@@ -107,9 +103,9 @@ const WatchFinderPage: React.FC<WatchFinderPageProps> = ({ onNavigateBack, apiKe
                 getLanguages(),
                 getPopularInBDMovies(),
                 getPopularHindiMovies(),
-                (supabase.from('watchfinder_profiles') as any).select('*').eq('id', userId).single(),
-                (supabase.from('watchfinder_favorites') as any).select('media_id, media_type').eq('user_id', userId),
-                (supabase.from('watchfinder_ratings') as any).select('media_id, media_type, rating, title').eq('user_id', userId)
+                supabase.from('watchfinder_profiles').select('*').eq('id', userId).single(),
+                supabase.from('watchfinder_favorites').select('media_id, media_type').eq('user_id', userId),
+                supabase.from('watchfinder_ratings').select('media_id, media_type, rating, title').eq('user_id', userId)
             ]);
             
             setNowPlaying(nowPlayingRes.results.slice(0, 10).map(m => ({...m, media_type: 'movie'} as Movie)));
@@ -335,14 +331,13 @@ const WatchFinderPage: React.FC<WatchFinderPageProps> = ({ onNavigateBack, apiKe
   const handleToggleFavorite = async (mediaId: number, mediaType: 'movie' | 'tv') => {
     const isFav = favorites.some(f => f.id === mediaId && f.media_type === mediaType);
     if (isFav) {
-        const { error } = await (supabase
-            .from('watchfinder_favorites') as any)
+        const { error } = await supabase
+            .from('watchfinder_favorites')
             .delete()
             .match({ user_id: userId, media_id: mediaId, media_type: mediaType });
         if (!error) setFavorites(prev => prev.filter(f => !(f.id === mediaId && f.media_type === mediaType)));
     } else {
-        const { error } = await (supabase
-            .from('watchfinder_favorites') as any)
+        const { error } = await (supabase.from('watchfinder_favorites') as any)
             .insert({ user_id: userId, media_id: mediaId, media_type: mediaType });
         if (!error) setFavorites(prev => [...prev, { id: mediaId, media_type: mediaType }]);
     }
@@ -351,7 +346,7 @@ const WatchFinderPage: React.FC<WatchFinderPageProps> = ({ onNavigateBack, apiKe
   const handleToggleLike = async (mediaId: number, mediaType: 'movie' | 'tv', title: string) => {
         const isLiked = likedItems.some(item => item.id === mediaId);
         if (isLiked) {
-             const { error } = await (supabase.from('watchfinder_ratings') as any).delete().match({ user_id: userId, media_id: mediaId });
+             const { error } = await supabase.from('watchfinder_ratings').delete().match({ user_id: userId, media_id: mediaId });
              if (!error) setLikedItems(prev => prev.filter(item => item.id !== mediaId));
         } else {
             const { error } = await (supabase.from('watchfinder_ratings') as any).upsert(
@@ -368,7 +363,7 @@ const WatchFinderPage: React.FC<WatchFinderPageProps> = ({ onNavigateBack, apiKe
     const handleToggleDislike = async (mediaId: number, mediaType: 'movie' | 'tv', title: string) => {
          const isDisliked = dislikedItems.some(item => item.id === mediaId);
         if (isDisliked) {
-            const { error } = await (supabase.from('watchfinder_ratings') as any).delete().match({ user_id: userId, media_id: mediaId });
+            const { error } = await supabase.from('watchfinder_ratings').delete().match({ user_id: userId, media_id: mediaId });
             if (!error) setDislikedItems(prev => prev.filter(item => item.id !== mediaId));
         } else {
             const { error } = await (supabase.from('watchfinder_ratings') as any).upsert(
@@ -379,34 +374,6 @@ const WatchFinderPage: React.FC<WatchFinderPageProps> = ({ onNavigateBack, apiKe
                 setDislikedItems(prev => [...prev, { id: mediaId, media_type: mediaType, title }]);
                 setLikedItems(l => l.filter(item => item.id !== mediaId));
             }
-        }
-    };
-    
-    const handleSendWatchInvite = async (receiver: ChatUser) => {
-        if (!selectedItem) return;
-        const title = 'title' in selectedItem ? selectedItem.title : selectedItem.name;
-        
-        const { error } = await (supabase.from('chat_messages') as any).insert({
-            sender_id: userId,
-            receiver_id: receiver.id,
-            content: `I am interested to watch this movie with you.`,
-            message_type: 'watch-invite',
-            payload: {
-                status: 'pending',
-                movie: {
-                    id: selectedItem.id,
-                    type: selectedItem.media_type,
-                    title: title,
-                    poster_path: selectedItem.poster_path
-                }
-            }
-        });
-        if (error) {
-            setError("Failed to send invite.");
-        } else {
-            setIsUserSearchModalOpen(false);
-            setSelectedItem(null);
-            alert(`Invite sent to ${receiver.username}!`);
         }
     };
 
@@ -484,7 +451,7 @@ const WatchFinderPage: React.FC<WatchFinderPageProps> = ({ onNavigateBack, apiKe
                   </button>
               </div>
             </div>
-            <div className="mt-4 flex flex-wrap gap-2">
+            <div className="mt-4 flex gap-2">
                 <button onClick={() => setMediaTypeFilter('all')} className={`px-4 py-1 text-sm font-bold rounded-full border-2 transition-colors ${mediaTypeFilter === 'all' ? 'bg-cyan-400 text-slate-900 border-cyan-400' : 'bg-slate-800 border-slate-600 text-slate-300 hover:bg-slate-700'}`}>All</button>
                 <button onClick={() => setMediaTypeFilter('movie')} className={`px-4 py-1 text-sm font-bold rounded-full border-2 transition-colors ${mediaTypeFilter === 'movie' ? 'bg-cyan-400 text-slate-900 border-cyan-400' : 'bg-slate-800 border-slate-600 text-slate-300 hover:bg-slate-700'}`}>Movies</button>
                 <button onClick={() => setMediaTypeFilter('tv')} className={`px-4 py-1 text-sm font-bold rounded-full border-2 transition-colors ${mediaTypeFilter === 'tv' ? 'bg-cyan-400 text-slate-900 border-cyan-400' : 'bg-slate-800 border-slate-600 text-slate-300 hover:bg-slate-700'}`}>TV Shows</button>
@@ -516,17 +483,9 @@ const WatchFinderPage: React.FC<WatchFinderPageProps> = ({ onNavigateBack, apiKe
             onToggleLike={handleToggleLike}
             isDisliked={dislikedItems.some(item => item.id === selectedItem.id)}
             onToggleDislike={handleToggleDislike}
-            onWatchWithFriend={() => setIsUserSearchModalOpen(true)}
         />
       )}
       
-      <UserSearchModal
-        isOpen={isUserSearchModalOpen}
-        onClose={() => setIsUserSearchModalOpen(false)}
-        currentUserId={userId}
-        onSendInvite={handleSendWatchInvite}
-      />
-
       <TasteProfileModal 
         isOpen={isTasteModalOpen}
         onClose={() => setIsTasteModalOpen(false)}
