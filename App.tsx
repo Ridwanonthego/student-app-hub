@@ -171,7 +171,7 @@ const initialApps: (Omit<AppCardProps, 'onSelect'> & { pageId: string; href?: st
     { title: "Cv Expert", pageId: 'ai-cv-architect', description: "1 click cv from a Linkedin Link.", icon: <CvIcon />, hue: 260 },
     { title: "BanglaNutriPlan", pageId: 'bangla-nutri-plan', description: "Personalized Bangladeshi diet plans.", icon: <NutritionIcon />, hue: 30 },
     { title: "Stata Assistant", pageId: 'stata-assistant', description: "Debug & analyze Stata code with AI.", icon: <StataIcon />, hue: 300 },
-    { title: "শিক্ষক App", pageId: 'shikhok', description: "Teaches you whole curriculum through exciting podcasts from your College books", icon: <ShikhokIcon />, hue: 50 },
+    { title: "शिक्षक App", pageId: 'shikhok', description: "Teaches you whole curriculum through exciting podcasts from your College books", icon: <ShikhokIcon />, hue: 50 },
     { title: "Concept Clear", pageId: 'concept-clear', description: "Understand complex topics easily.", icon: <BrainCircuitIcon />, hue: 90 },
     { title: "Kajer List", pageId: 'todo-list', description: "An intelligent to-do list that understands you.", icon: <TodoListIcon/>, hue: 50 },
     { title: "Thera.py", pageId: 'thera-py', href: "https://therapy-one-psi.vercel.app/", description: "Confidential Ai Therapist. New login required.", icon: <TherapyIcon />, hue: 200 },
@@ -737,8 +737,8 @@ const App: React.FC = () => {
                onDecline={hangUp}
            />
        )}
-       <audio ref={ringtoneAudioRef} src="https://res.cloudinary.com/dy80ftu9k/video/upload/v1755296718/Untitled_3_mp3cut.net_u8mk54.mp3" preload="auto" loop playsInline></audio>
-       <audio ref={ringbackAudioRef} src="https://res.cloudinary.com/dy80ftu9k/video/upload/v1755301549/phone-calling-144220_h5wprh.mp3" preload="auto" loop playsInline></audio>
+       <audio ref={ringtoneAudioRef} src="https://cdn.pixabay.com/audio/2022/03/15/audio_731c14a273.mp3" preload="auto" loop playsInline></audio>
+       <audio ref={ringbackAudioRef} src="https://cdn.pixabay.com/audio/2022/01/20/audio_29b2cce24e.mp3" preload="auto" loop playsInline></audio>
        <audio ref={remoteAudioRef} autoPlay playsInline />
 
        <div
