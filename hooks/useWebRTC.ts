@@ -44,9 +44,8 @@ export const useWebRTC = (session: Session | null, onCallStart?: () => void) => 
             const playPromise = ringtoneAudioRef.current.play();
             if (playPromise) {
                 playPromise.catch(e => {
-                    // This error is expected if stopRingtone is called quickly after play. It's non-fatal.
                     if (e.name !== 'AbortError') {
-                        console.error(`${LOG_PREFIX} Ringtone playback failed`, e)
+                        console.error(`${LOG_PREFIX} Ringtone playback failed`, e);
                     }
                 });
             }
@@ -217,28 +216,18 @@ export const useWebRTC = (session: Session | null, onCallStart?: () => void) => 
     };
 
     const answerCall = async () => {
-        // Guard 1: Prevent re-entry if an answer is already being processed.
-        if (isProcessingCallAction.current) {
-            console.warn(LOG_PREFIX, 'Answer already in progress. Ignoring click.');
+        // This is the most reliable guard. The WebRTC state machine prevents creating an answer
+        // if an offer hasn't been received and set, or if an answer has already been created.
+        if (!peerConnection.current || peerConnection.current.signalingState !== 'have-remote-offer') {
+            console.warn(`${LOG_PREFIX} Cannot answer call, signaling state is not 'have-remote-offer'. Current state: ${peerConnection.current?.signalingState}`);
             return;
         }
-        // Set processing flag immediately to prevent race conditions from rapid clicks.
-        isProcessingCallAction.current = true;
+        
+        if (callStateRef.current.status !== 'incoming' || !callStateRef.current.peer) {
+            console.error(`${LOG_PREFIX} Cannot answer call, invalid application state. Status: ${callStateRef.current.status}`);
+            return;
+        }
 
-        // Guard 2: Check the overall call state.
-        if (callStateRef.current.status !== 'incoming' || !peerConnection.current || !callStateRef.current.peer) {
-            console.error(`${LOG_PREFIX} Cannot answer call, invalid state. Status: ${callStateRef.current.status}`);
-            isProcessingCallAction.current = false; // Reset flag on failure
-            return;
-        }
-        
-        // Guard 3: This is the crucial check for WebRTC state machine.
-        if (peerConnection.current.signalingState !== 'have-remote-offer') {
-            console.warn(`${LOG_PREFIX} Cannot create answer because signaling state is '${peerConnection.current.signalingState}'. Ignoring click.`);
-            isProcessingCallAction.current = false; // Reset flag on failure
-            return;
-        }
-        
         console.log(`${LOG_PREFIX} Answering call from ${callStateRef.current.peer.username}.`);
         stopRingtone();
 
@@ -255,12 +244,7 @@ export const useWebRTC = (session: Session | null, onCallStart?: () => void) => 
             await sendSignal(callStateRef.current.peer.id, 'answer', { answer });
         } catch (error) {
             console.error(`${LOG_PREFIX} Error answering call:`, error);
-            cleanupCall(); // This also resets isProcessingCallAction
-        } finally {
-             // Only reset if the call wasn't cleaned up (which would have already reset it)
-             if (peerConnection.current) {
-                isProcessingCallAction.current = false;
-             }
+            cleanupCall();
         }
     };
 
