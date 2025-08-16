@@ -1,5 +1,6 @@
 
 
+
 import React, { useState, useEffect, useRef } from 'react';
 import { ChatMessage, ChatPart, GeminiBanglaPageProps } from './types';
 import { createGeminiBanglaChat, sendGeminiBanglaChatMessage } from './gemini-service';
@@ -29,34 +30,34 @@ const GeminiBanglaPage: React.FC<GeminiBanglaPageProps> = ({ onNavigateBack, api
                     todoRes,
                     historyRes
                 ] = await Promise.all([
-                    (supabase.from('profiles') as any).select('full_name, username').eq('id', user.id).single(),
-                    (supabase.from('cv_data') as any).select('raw_info').eq('id', user.id).maybeSingle(),
-                    (supabase.from('watchfinder_profiles') as any).select('favorite_genres, favorite_actors, preferred_description').eq('id', user.id).maybeSingle(),
-                    (supabase.from('banglanutri_profiles') as any).select('goal, exclusions').eq('id', user.id).maybeSingle(),
-                    (supabase.from('todo_tasks') as any).select('title, status').eq('user_id', user.id).limit(5).order('created_at', { ascending: false }),
-                    (supabase.from('gemini_bangla_chat_history') as any).select('history').eq('user_id', user.id).maybeSingle()
+                    supabase.from('profiles').select('full_name, username').eq('id', user.id).single(),
+                    supabase.from('cv_data').select('raw_info').eq('id', user.id).maybeSingle(),
+                    supabase.from('watchfinder_profiles').select('favorite_genres, favorite_actors, preferred_description').eq('id', user.id).maybeSingle(),
+                    supabase.from('banglanutri_profiles').select('goal, exclusions').eq('id', user.id).maybeSingle(),
+                    supabase.from('todo_tasks').select('title, status').eq('user_id', user.id).limit(5).order('created_at', { ascending: false }),
+                    supabase.from('gemini_bangla_chat_history').select('history').eq('user_id', user.id).maybeSingle()
                 ]);
 
                 // 2. Build the context string
                 let userContext = "";
-                const profileData = profileRes.data as any;
+                const profileData = profileRes.data;
                 if (profileData) userContext += `User's Name: ${profileData.full_name || profileData.username}. `;
                 
-                const cvData = cvRes.data as any;
+                const cvData = cvRes.data;
                 if (cvData && cvData.raw_info) userContext += `Professional Summary: ${cvData.raw_info.substring(0, 150)}... `;
 
-                const watchfinderData = watchfinderRes.data as any;
+                const watchfinderData = watchfinderRes.data;
                 if (watchfinderData) userContext += `Movie Tastes: Likes genres like ${watchfinderData.favorite_genres?.join(', ')}. `;
                 
-                const nutriData = nutriRes.data as any;
+                const nutriData = nutriRes.data;
                 if (nutriData) userContext += `Health Goal: To ${nutriData.goal} weight. They don't eat: ${nutriData.exclusions?.join(', ')}. `;
                 
-                const todoData = todoRes.data as any[];
+                const todoData = todoRes.data;
                 if (todoData && todoData.length > 0) userContext += `Recent Tasks: ${todoData.map(t => `${t.title}`).join(', ')}. `;
                 
                 // 3. Initialize chat with history and context
                 let initialHistory: ChatMessage[] = [];
-                const typedData = historyRes.data as unknown as { history: Json | null } | null;
+                const typedData = historyRes.data;
                 if (typedData?.history) {
                     // Deep copy to break potential recursive type from Supabase's 'Json' type
                     initialHistory = JSON.parse(JSON.stringify(typedData.history)) as ChatMessage[];
@@ -144,23 +145,23 @@ const GeminiBanglaPage: React.FC<GeminiBanglaPageProps> = ({ onNavigateBack, api
             const [
                 profileRes, cvRes, watchfinderRes, nutriRes, todoRes
             ] = await Promise.all([
-                (supabase.from('profiles') as any).select('full_name, username').eq('id', user.id).single(),
-                (supabase.from('cv_data') as any).select('raw_info').eq('id', user.id).maybeSingle(),
-                (supabase.from('watchfinder_profiles') as any).select('favorite_genres, favorite_actors, preferred_description').eq('id', user.id).maybeSingle(),
-                (supabase.from('banglanutri_profiles') as any).select('goal, exclusions').eq('id', user.id).maybeSingle(),
-                (supabase.from('todo_tasks') as any).select('title, status').eq('user_id', user.id).limit(5).order('created_at', { ascending: false })
+                supabase.from('profiles').select('full_name, username').eq('id', user.id).single(),
+                supabase.from('cv_data').select('raw_info').eq('id', user.id).maybeSingle(),
+                supabase.from('watchfinder_profiles').select('favorite_genres, favorite_actors, preferred_description').eq('id', user.id).maybeSingle(),
+                supabase.from('banglanutri_profiles').select('goal, exclusions').eq('id', user.id).maybeSingle(),
+                supabase.from('todo_tasks').select('title, status').eq('user_id', user.id).limit(5).order('created_at', { ascending: false })
             ]);
 
             let userContext = "";
-            const profileData = profileRes.data as any;
+            const profileData = profileRes.data;
             if (profileData) userContext += `User's Name: ${profileData.full_name || profileData.username}. `;
-            const cvData = cvRes.data as any;
+            const cvData = cvRes.data;
             if (cvData && cvData.raw_info) userContext += `Professional Summary: ${cvData.raw_info.substring(0, 150)}... `;
-            const watchfinderData = watchfinderRes.data as any;
+            const watchfinderData = watchfinderRes.data;
             if (watchfinderData) userContext += `Movie Tastes: Likes genres like ${watchfinderData.favorite_genres?.join(', ')}. `;
-            const nutriData = nutriRes.data as any;
+            const nutriData = nutriRes.data;
             if (nutriData) userContext += `Health Goal: To ${nutriData.goal} weight. They don't eat: ${nutriData.exclusions?.join(', ')}. `;
-            const todoData = todoRes.data as any[];
+            const todoData = todoRes.data;
             if (todoData && todoData.length > 0) userContext += `Recent Tasks: ${todoData.map(t => `${t.title}`).join(', ')}. `;
 
             // 3. Re-initialize chat with empty history
