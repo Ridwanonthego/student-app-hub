@@ -1,4 +1,5 @@
 
+
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import WatchFinderPage from './apps/movie-flix/MovieFlixPage';
 import AiHumanizerPage from './apps/ai-humanizer/AiHumanizerPage';
@@ -736,8 +737,8 @@ const App: React.FC = () => {
                onDecline={hangUp}
            />
        )}
-       <audio ref={ringtoneAudioRef} src="https://res.cloudinary.com/dy80ftu9k/video/upload/v1755296718/Untitled_3_mp3cut.net_u8mk54.mp3" preload="auto" loop></audio>
-       <audio ref={ringbackAudioRef} src="https://res.cloudinary.com/dy80ftu9k/video/upload/v1755301549/phone-calling-144220_h5wprh.mp3" preload="auto" loop></audio>
+       <audio ref={ringtoneAudioRef} src="https://res.cloudinary.com/dy80ftu9k/video/upload/v1755296718/Untitled_3_mp3cut.net_u8mk54.mp3" preload="auto" loop playsInline></audio>
+       <audio ref={ringbackAudioRef} src="https://res.cloudinary.com/dy80ftu9k/video/upload/v1755301549/phone-calling-144220_h5wprh.mp3" preload="auto" loop playsInline></audio>
        <audio ref={remoteAudioRef} autoPlay playsInline />
 
        <div
