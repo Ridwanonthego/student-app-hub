@@ -207,9 +207,17 @@ export const useWebRTC = (session: Session | null, onCallStart?: () => void) => 
     };
 
     const answerCall = async () => {
-        if (callStateRef.current.status !== 'incoming' || !peerConnection.current || !callStateRef.current.peer || isProcessingCallAction.current) {
-            if (isProcessingCallAction.current) console.warn(LOG_PREFIX, 'Answer already in progress.');
-            else console.error(`${LOG_PREFIX} Cannot answer call in current state:`, callStateRef.current.status);
+        if (isProcessingCallAction.current) {
+            console.warn(LOG_PREFIX, 'Answer already in progress.');
+            return;
+        }
+        if (callStateRef.current.status !== 'incoming' || !peerConnection.current || !callStateRef.current.peer) {
+            console.error(`${LOG_PREFIX} Cannot answer call in current state:`, callStateRef.current.status);
+            return;
+        }
+        // This check prevents an error if the answer button is clicked multiple times.
+        if (peerConnection.current.signalingState !== 'have-remote-offer') {
+            console.warn(`${LOG_PREFIX} Cannot create answer because signaling state is '${peerConnection.current.signalingState}'. Ignoring click.`);
             return;
         }
         
