@@ -29,6 +29,7 @@ export const useWebRTC = (session: Session | null, onCallStart?: () => void) => 
     const callTimerRef = useRef<number | null>(null);
     const iceCandidatesBuffer = useRef<RTCIceCandidateInit[]>([]);
     const isProcessingCallAction = useRef(false);
+    const isCleaningUp = useRef(false);
 
     // Use a ref to get the latest callState inside callbacks without causing re-subscriptions
     const callStateRef = useRef(callState);
@@ -96,6 +97,9 @@ export const useWebRTC = (session: Session | null, onCallStart?: () => void) => 
     };
 
     const cleanupCall = useCallback(() => {
+        if (isCleaningUp.current) return;
+        isCleaningUp.current = true;
+
         console.log(`${LOG_PREFIX} Cleaning up call resources.`);
         stopRingtone();
         stopRingback();
@@ -130,7 +134,10 @@ export const useWebRTC = (session: Session | null, onCallStart?: () => void) => 
         isProcessingCallAction.current = false;
 
         setCallState(prev => ({ status: 'disconnected', peer: prev.peer }));
-        setTimeout(() => setCallState({ status: 'idle', peer: null }), 2000);
+        setTimeout(() => {
+            setCallState({ status: 'idle', peer: null });
+            isCleaningUp.current = false;
+        }, 2000);
     }, [stopRingtone, stopRingback]);
     
     const createPeerConnection = useCallback((peerId: string) => {
