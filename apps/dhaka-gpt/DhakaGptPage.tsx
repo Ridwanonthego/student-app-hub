@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { ChatMessage, ChatPart, GeminiBanglaPageProps } from './types';
 import { createGeminiBanglaChat, sendGeminiBanglaChatMessage } from './gemini-service';
@@ -100,7 +99,7 @@ const GeminiBanglaPage: React.FC<GeminiBanglaPageProps> = ({ onNavigateBack, api
         if (newHistory.some(m => m.role === 'user')) {
              await (supabase.from('gemini_bangla_chat_history') as any).upsert([{
                 user_id: user.id,
-                history: newHistory as any,
+                history: newHistory as unknown as Json,
                 updated_at: new Date().toISOString()
             }]);
         }
