@@ -26,6 +26,7 @@ export const useWebRTC = (session: Session | null, onCallStart?: () => void) => 
     const ringbackAudioRef = useRef<HTMLAudioElement>(null);
     const callTimerRef = useRef<number | null>(null);
     const iceCandidatesBuffer = useRef<RTCIceCandidateInit[]>([]);
+    const isProcessingCallAction = useRef(false);
 
     const playRingtone = useCallback(() => {
         if (ringtoneAudioRef.current) {
@@ -108,6 +109,7 @@ export const useWebRTC = (session: Session | null, onCallStart?: () => void) => 
         }
         
         iceCandidatesBuffer.current = [];
+        isProcessingCallAction.current = false;
 
         setCallState(prev => ({ status: 'disconnected', peer: prev.peer }));
         setTimeout(() => setCallState({ status: 'idle', peer: null }), 2000);
@@ -162,7 +164,9 @@ export const useWebRTC = (session: Session | null, onCallStart?: () => void) => 
     }, [cleanupCall, stopRingback, stopRingtone]);
 
     const initiateCall = async (peer: ChatUser) => {
-        if (callState.status !== 'idle' || !session?.user) return;
+        if (callState.status !== 'idle' || !session?.user || isProcessingCallAction.current) return;
+        isProcessingCallAction.current = true;
+        
         console.log(`${LOG_PREFIX} Initiating call to ${peer.username} (${peer.id})`);
         onCallStart?.();
 
@@ -191,11 +195,13 @@ export const useWebRTC = (session: Session | null, onCallStart?: () => void) => 
     };
 
     const answerCall = async () => {
-        if (callState.status !== 'incoming' || !peerConnection.current || !callState.peer) {
-            console.error(`${LOG_PREFIX} Cannot answer call in current state:`, callState.status);
+        if (callState.status !== 'incoming' || !peerConnection.current || !callState.peer || isProcessingCallAction.current) {
+            if (isProcessingCallAction.current) console.warn(LOG_PREFIX, 'Answer already in progress.');
+            else console.error(`${LOG_PREFIX} Cannot answer call in current state:`, callState.status);
             return;
         }
         
+        isProcessingCallAction.current = true;
         console.log(`${LOG_PREFIX} Answering call from ${callState.peer.username}.`);
         stopRingtone();
 
@@ -242,10 +248,12 @@ export const useWebRTC = (session: Session | null, onCallStart?: () => void) => 
                         console.warn(LOG_PREFIX, 'Ignoring incoming offer, already in a call.');
                         return;
                     }
+                    isProcessingCallAction.current = true;
                     onCallStart?.();
                     const { data: callerProfile } = await (supabase.from('profiles') as any).select('id, username, full_name, avatar_url').eq('id', signal.sender_id).single();
                     if (!callerProfile) {
                         console.error(`${LOG_PREFIX} Could not find profile for caller ID: ${signal.sender_id}`);
+                        isProcessingCallAction.current = false;
                         return;
                     }
 
