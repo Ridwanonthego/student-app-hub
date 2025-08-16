@@ -88,7 +88,7 @@ const GeminiBanglaPage: React.FC<GeminiBanglaPageProps> = ({ onNavigateBack, api
         if (newHistory.some(m => m.role === 'user')) {
              await (supabase.from('gemini_bangla_chat_history') as any).upsert([{
                 user_id: user.id,
-                history: JSON.parse(JSON.stringify(newHistory)),
+                history: newHistory,
                 updated_at: new Date().toISOString()
             }]);
         }
