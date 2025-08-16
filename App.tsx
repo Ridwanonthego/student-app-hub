@@ -737,8 +737,8 @@ const App: React.FC = () => {
                onDecline={hangUp}
            />
        )}
-       <audio ref={ringtoneAudioRef} src="https://cdn.pixabay.com/audio/2022/03/15/audio_731c14a273.mp3" preload="auto" loop playsInline></audio>
-       <audio ref={ringbackAudioRef} src="https://cdn.pixabay.com/audio/2022/01/20/audio_29b2cce24e.mp3" preload="auto" loop playsInline></audio>
+       <audio ref={ringtoneAudioRef} src="https://assets.mixkit.co/sfx/preview/mixkit-marimba-waiting-ringtone-1360.mp3" preload="auto" loop playsInline></audio>
+       <audio ref={ringbackAudioRef} src="https://assets.mixkit.co/sfx/preview/mixkit-long-phone-ring-1354.mp3" preload="auto" loop playsInline></audio>
        <audio ref={remoteAudioRef} autoPlay playsInline />
 
        <div
