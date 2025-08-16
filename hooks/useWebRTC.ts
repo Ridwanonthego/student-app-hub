@@ -43,7 +43,12 @@ export const useWebRTC = (session: Session | null, onCallStart?: () => void) => 
             ringtoneAudioRef.current.currentTime = 0;
             const playPromise = ringtoneAudioRef.current.play();
             if (playPromise) {
-                playPromise.catch(e => console.error(`${LOG_PREFIX} Ringtone playback failed`, e));
+                playPromise.catch(e => {
+                    // This error is expected if stopRingtone is called quickly after play. It's non-fatal.
+                    if (e.name !== 'AbortError') {
+                        console.error(`${LOG_PREFIX} Ringtone playback failed`, e)
+                    }
+                });
             }
         }
     }, []);
@@ -63,7 +68,11 @@ export const useWebRTC = (session: Session | null, onCallStart?: () => void) => 
             ringbackAudioRef.current.currentTime = 0;
             const playPromise = ringbackAudioRef.current.play();
             if(playPromise) {
-                playPromise.catch(e => console.error(`${LOG_PREFIX} Ringback playback failed`, e));
+                playPromise.catch(e => {
+                    if (e.name !== 'AbortError') {
+                        console.error(`${LOG_PREFIX} Ringback playback failed`, e);
+                    }
+                });
             }
         }
     }, []);
@@ -132,7 +141,8 @@ export const useWebRTC = (session: Session | null, onCallStart?: () => void) => 
         pc.onicecandidate = event => {
             if (event.candidate) {
                 console.log(LOG_PREFIX, 'Generated ICE candidate:', event.candidate.candidate.substring(0, 30) + '...');
-                sendSignal(peerId, 'ice-candidate', { candidate: event.candidate });
+                // Send the serializable JSON object of the candidate
+                sendSignal(peerId, 'ice-candidate', { candidate: event.candidate.toJSON() });
             } else {
                 console.log(LOG_PREFIX, 'All ICE candidates have been sent.');
             }
@@ -207,21 +217,28 @@ export const useWebRTC = (session: Session | null, onCallStart?: () => void) => 
     };
 
     const answerCall = async () => {
+        // Guard 1: Prevent re-entry if an answer is already being processed.
         if (isProcessingCallAction.current) {
-            console.warn(LOG_PREFIX, 'Answer already in progress.');
+            console.warn(LOG_PREFIX, 'Answer already in progress. Ignoring click.');
             return;
         }
+        // Set processing flag immediately to prevent race conditions from rapid clicks.
+        isProcessingCallAction.current = true;
+
+        // Guard 2: Check the overall call state.
         if (callStateRef.current.status !== 'incoming' || !peerConnection.current || !callStateRef.current.peer) {
-            console.error(`${LOG_PREFIX} Cannot answer call in current state:`, callStateRef.current.status);
-            return;
-        }
-        // This check prevents an error if the answer button is clicked multiple times.
-        if (peerConnection.current.signalingState !== 'have-remote-offer') {
-            console.warn(`${LOG_PREFIX} Cannot create answer because signaling state is '${peerConnection.current.signalingState}'. Ignoring click.`);
+            console.error(`${LOG_PREFIX} Cannot answer call, invalid state. Status: ${callStateRef.current.status}`);
+            isProcessingCallAction.current = false; // Reset flag on failure
             return;
         }
         
-        isProcessingCallAction.current = true;
+        // Guard 3: This is the crucial check for WebRTC state machine.
+        if (peerConnection.current.signalingState !== 'have-remote-offer') {
+            console.warn(`${LOG_PREFIX} Cannot create answer because signaling state is '${peerConnection.current.signalingState}'. Ignoring click.`);
+            isProcessingCallAction.current = false; // Reset flag on failure
+            return;
+        }
+        
         console.log(`${LOG_PREFIX} Answering call from ${callStateRef.current.peer.username}.`);
         stopRingtone();
 
@@ -238,9 +255,12 @@ export const useWebRTC = (session: Session | null, onCallStart?: () => void) => 
             await sendSignal(callStateRef.current.peer.id, 'answer', { answer });
         } catch (error) {
             console.error(`${LOG_PREFIX} Error answering call:`, error);
-            cleanupCall();
+            cleanupCall(); // This also resets isProcessingCallAction
         } finally {
-             isProcessingCallAction.current = false;
+             // Only reset if the call wasn't cleaned up (which would have already reset it)
+             if (peerConnection.current) {
+                isProcessingCallAction.current = false;
+             }
         }
     };
 
