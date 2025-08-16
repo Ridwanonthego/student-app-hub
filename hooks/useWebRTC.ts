@@ -30,8 +30,11 @@ export const useWebRTC = (session: Session | null, onCallStart?: () => void) => 
     const playRingtone = useCallback(() => {
         if (ringtoneAudioRef.current) {
             console.log(LOG_PREFIX, 'Playing ringtone...');
-            ringtoneAudioRef.current.currentTime = 0;
-            ringtoneAudioRef.current.play().catch(e => console.error(`${LOG_PREFIX} Ringtone playback failed`, e));
+            ringtoneAudioRef.current.load();
+            const playPromise = ringtoneAudioRef.current.play();
+            if (playPromise) {
+                playPromise.catch(e => console.error(`${LOG_PREFIX} Ringtone playback failed`, e));
+            }
         }
     }, []);
 
@@ -46,8 +49,11 @@ export const useWebRTC = (session: Session | null, onCallStart?: () => void) => 
     const playRingback = useCallback(() => {
         if (ringbackAudioRef.current) {
             console.log(LOG_PREFIX, 'Playing ringback...');
-            ringbackAudioRef.current.currentTime = 0;
-            ringbackAudioRef.current.play().catch(e => console.error(`${LOG_PREFIX} Ringback playback failed`, e));
+            ringbackAudioRef.current.load();
+            const playPromise = ringbackAudioRef.current.play();
+            if(playPromise) {
+                playPromise.catch(e => console.error(`${LOG_PREFIX} Ringback playback failed`, e));
+            }
         }
     }, []);
 
@@ -140,9 +146,15 @@ export const useWebRTC = (session: Session | null, onCallStart?: () => void) => 
                     stopRingtone();
                     setCallState(prev => ({ ...prev, status: 'connected' }));
                 }
-                if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
+                if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected' || pc.connectionState === 'closed') {
                     cleanupCall();
                 }
+            }
+        };
+        
+        pc.onsignalingstatechange = () => {
+            if (pc) {
+                console.log(`${LOG_PREFIX} Signaling state changed: ${pc.signalingState}`);
             }
         };
 
@@ -162,11 +174,12 @@ export const useWebRTC = (session: Session | null, onCallStart?: () => void) => 
             setCallState({ status: 'outgoing', peer });
             playRingback();
 
-            peerConnection.current = createPeerConnection(peer.id);
-            stream.getTracks().forEach(track => peerConnection.current?.addTrack(track, stream));
+            const pc = createPeerConnection(peer.id);
+            peerConnection.current = pc;
+            stream.getTracks().forEach(track => pc.addTrack(track, stream));
 
-            const offer = await peerConnection.current.createOffer();
-            await peerConnection.current.setLocalDescription(offer);
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
             console.log(LOG_PREFIX, 'Created offer and set local description.');
             
             sendSignal(peer.id, 'offer', { offer });
@@ -182,7 +195,15 @@ export const useWebRTC = (session: Session | null, onCallStart?: () => void) => 
             console.error(`${LOG_PREFIX} Cannot answer call in current state:`, callState.status);
             return;
         }
-        console.log(`${LOG_PREFIX} Answering call from ${callState.peer.username}`);
+        
+        console.log(`${LOG_PREFIX} Answering call from ${callState.peer.username}. Current signaling state: ${peerConnection.current.signalingState}`);
+
+        if (peerConnection.current.signalingState !== 'have-remote-offer') {
+            console.error(`${LOG_PREFIX} Invalid state for answering. Expected 'have-remote-offer', got '${peerConnection.current.signalingState}'. Aborting answer.`);
+            cleanupCall();
+            return;
+        }
+
         stopRingtone();
 
         try {
@@ -225,15 +246,30 @@ export const useWebRTC = (session: Session | null, onCallStart?: () => void) => 
                     }
                     onCallStart?.();
                     const { data: callerProfile } = await (supabase.from('profiles') as any).select('id, username, full_name, avatar_url').eq('id', signal.sender_id).single();
-                    if (!callerProfile) return;
+                    if (!callerProfile) {
+                        console.error(`${LOG_PREFIX} Could not find profile for caller ID: ${signal.sender_id}`);
+                        return;
+                    }
 
-                    peerConnection.current = createPeerConnection(signal.sender_id);
-                    await peerConnection.current.setRemoteDescription(new RTCSessionDescription(signal.payload.offer));
-                    console.log(LOG_PREFIX, 'Set remote description from offer.');
+                    const pc = createPeerConnection(signal.sender_id);
+                    peerConnection.current = pc;
+
+                    try {
+                        await pc.setRemoteDescription(new RTCSessionDescription(signal.payload.offer));
+                        console.log(LOG_PREFIX, `Set remote description from offer. New state: ${pc.signalingState}`);
+                    } catch (e) {
+                        console.error(LOG_PREFIX, 'Failed to set remote description from offer:', e);
+                        cleanupCall();
+                        return;
+                    }
                     
-                    // Process any buffered candidates that arrived early
+                    console.log(LOG_PREFIX, `Processing ${iceCandidatesBuffer.current.length} buffered ICE candidates.`);
                     for (const candidate of iceCandidatesBuffer.current) {
-                        await peerConnection.current.addIceCandidate(new RTCIceCandidate(candidate));
+                        try {
+                            await pc.addIceCandidate(new RTCIceCandidate(candidate));
+                        } catch(e) {
+                            console.warn(LOG_PREFIX, 'Failed to add buffered ICE candidate:', e);
+                        }
                     }
                     iceCandidatesBuffer.current = [];
                     
@@ -284,9 +320,12 @@ export const useWebRTC = (session: Session | null, onCallStart?: () => void) => 
                 table: 'webrtc_signals',
                 filter: `receiver_id=eq.${session.user.id}`
             }, handleSignal)
-            .subscribe((status) => {
+            .subscribe((status, err) => {
                 if (status === 'SUBSCRIBED') {
                     console.log(LOG_PREFIX, 'Subscribed to signaling channel.');
+                }
+                if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+                    console.error(`${LOG_PREFIX} Signaling channel error:`, err);
                 }
             });
             
