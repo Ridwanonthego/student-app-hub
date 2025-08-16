@@ -19,6 +19,7 @@ export const useWebRTC = (session: Session | null, onCallStart?: () => void) => 
     const [callDuration, setCallDuration] = useState(0);
     const peerConnection = useRef<RTCPeerConnection | null>(null);
     const remoteAudioRef = useRef<HTMLAudioElement>(null);
+    const remoteStreamRef = useRef<MediaStream | null>(null);
     const ringtoneAudioRef = useRef<HTMLAudioElement>(null);
     const ringbackAudioRef = useRef<HTMLAudioElement>(null);
     const callTimerRef = useRef<number | null>(null);
@@ -92,6 +93,13 @@ export const useWebRTC = (session: Session | null, onCallStart?: () => void) => 
         if (callState.localStream) {
             callState.localStream.getTracks().forEach(track => track.stop());
         }
+        if (remoteStreamRef.current) {
+            remoteStreamRef.current.getTracks().forEach(track => track.stop());
+            remoteStreamRef.current = null;
+        }
+        if (remoteAudioRef.current) {
+            remoteAudioRef.current.srcObject = null;
+        }
         setCallState({ status: 'disconnected', peer: callState.peer, localStream: null });
         setTimeout(() => setCallState({ status: 'idle', peer: null, localStream: null }), 2000);
     }, [callState.localStream, callState.peer, stopRingtone, stopRingback]);
@@ -131,7 +139,11 @@ export const useWebRTC = (session: Session | null, onCallStart?: () => void) => 
             
             pc.ontrack = event => {
                 if (remoteAudioRef.current) {
-                    remoteAudioRef.current.srcObject = event.streams[0];
+                    if (!remoteStreamRef.current) {
+                        remoteStreamRef.current = new MediaStream();
+                        remoteAudioRef.current.srcObject = remoteStreamRef.current;
+                    }
+                    remoteStreamRef.current.addTrack(event.track);
                     remoteAudioRef.current.play().catch(e => console.error("Remote audio playback failed in ontrack (caller)", e));
                 }
             };
@@ -201,7 +213,11 @@ export const useWebRTC = (session: Session | null, onCallStart?: () => void) => 
                 };
                  newPc.ontrack = event => {
                     if (remoteAudioRef.current) {
-                        remoteAudioRef.current.srcObject = event.streams[0];
+                        if (!remoteStreamRef.current) {
+                            remoteStreamRef.current = new MediaStream();
+                            remoteAudioRef.current.srcObject = remoteStreamRef.current;
+                        }
+                        remoteStreamRef.current.addTrack(event.track);
                         remoteAudioRef.current.play().catch(e => console.error("Remote audio playback failed in ontrack (receiver)", e));
                     }
                 };
