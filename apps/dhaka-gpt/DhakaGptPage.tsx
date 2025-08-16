@@ -6,7 +6,6 @@ import { BackArrowIcon, SpinnerIcon, TrashIcon } from '../../components/Icons';
 import { supabase } from '../../supabase/client';
 import { Chat } from '@google/genai';
 import { User } from '@supabase/supabase-js';
-import { Json } from '../../supabase/database.types';
 
 const GeminiBanglaPage: React.FC<GeminiBanglaPageProps> = ({ onNavigateBack, apiKey, user }) => {
     const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -99,7 +98,7 @@ const GeminiBanglaPage: React.FC<GeminiBanglaPageProps> = ({ onNavigateBack, api
         if (newHistory.some(m => m.role === 'user')) {
              await (supabase.from('gemini_bangla_chat_history') as any).upsert([{
                 user_id: user.id,
-                history: newHistory as unknown as Json,
+                history: newHistory as any,
                 updated_at: new Date().toISOString()
             }]);
         }
