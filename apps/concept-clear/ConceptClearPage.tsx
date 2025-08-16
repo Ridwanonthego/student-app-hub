@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { BackArrowIcon } from '../../components/Icons';
 import * as I from './icons';
@@ -14,7 +15,7 @@ const ConceptClearPage: React.FC<ConceptClearPageProps> = ({ onNavigateBack, api
     const [deeperDiveContent, setDeeperDiveContent] = useState('');
 
     // Loading and error states
-    const [isLoading, setIsLoading] = useState(true);
+    const [isLoading, setIsLoading] = useState(false);
     const [isDeeperDiveLoading, setIsDeeperDiveLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -40,10 +41,9 @@ const ConceptClearPage: React.FC<ConceptClearPageProps> = ({ onNavigateBack, api
     }, [apiKey]);
 
     useEffect(() => {
-        // Load initial example on mount
+        // Load initial example on mount, but do not run generation.
         setTopic(INITIAL_TOPIC);
-        fetchExplanation(INITIAL_TOPIC, 'Simple');
-    }, [fetchExplanation]);
+    }, []);
 
     const handleSubmit = () => {
         fetchExplanation(topic, style);

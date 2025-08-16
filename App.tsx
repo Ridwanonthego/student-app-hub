@@ -23,7 +23,6 @@ import { useMusicPlayer } from './hooks/useMusicPlayer';
 import { useWebRTC } from './hooks/useWebRTC';
 import { CallCapsule } from './components/CallCapsule';
 
-
 const fictionalNames = [
   'Aragorn', 'BilboBaggins', 'Gandalf', 'Legolas', 'Gimli', 'FrodoBaggins', 'SamwiseGamgee',
   'LukeSkywalker', 'DarthVader', 'PrincessLeia', 'HanSolo', 'Chewbacca', 'Yoda',

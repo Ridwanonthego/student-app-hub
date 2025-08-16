@@ -29,8 +29,8 @@ export const useWebRTC = (session: Session | null, onCallStart?: () => void) => 
 
     const playRingtone = useCallback(() => {
         if (ringtoneAudioRef.current) {
-            console.log(LOG_PREFIX, 'Playing ringtone...');
-            ringtoneAudioRef.current.load();
+            console.log(LOG_PREFIX, 'Attempting to play ringtone...');
+            ringtoneAudioRef.current.currentTime = 0;
             const playPromise = ringtoneAudioRef.current.play();
             if (playPromise) {
                 playPromise.catch(e => console.error(`${LOG_PREFIX} Ringtone playback failed`, e));
@@ -48,8 +48,8 @@ export const useWebRTC = (session: Session | null, onCallStart?: () => void) => 
 
     const playRingback = useCallback(() => {
         if (ringbackAudioRef.current) {
-            console.log(LOG_PREFIX, 'Playing ringback...');
-            ringbackAudioRef.current.load();
+            console.log(LOG_PREFIX, 'Attempting to play ringback...');
+            ringbackAudioRef.current.currentTime = 0;
             const playPromise = ringbackAudioRef.current.play();
             if(playPromise) {
                 playPromise.catch(e => console.error(`${LOG_PREFIX} Ringback playback failed`, e));
@@ -196,14 +196,7 @@ export const useWebRTC = (session: Session | null, onCallStart?: () => void) => 
             return;
         }
         
-        console.log(`${LOG_PREFIX} Answering call from ${callState.peer.username}. Current signaling state: ${peerConnection.current.signalingState}`);
-
-        if (peerConnection.current.signalingState !== 'have-remote-offer') {
-            console.error(`${LOG_PREFIX} Invalid state for answering. Expected 'have-remote-offer', got '${peerConnection.current.signalingState}'. Aborting answer.`);
-            cleanupCall();
-            return;
-        }
-
+        console.log(`${LOG_PREFIX} Answering call from ${callState.peer.username}.`);
         stopRingtone();
 
         try {
@@ -212,6 +205,11 @@ export const useWebRTC = (session: Session | null, onCallStart?: () => void) => 
             localStream.current = stream;
             stream.getTracks().forEach(track => peerConnection.current!.addTrack(track, stream));
             
+            // Re-check state *after* getting user media, as this is an async step where state could change
+            if (peerConnection.current.signalingState !== 'have-remote-offer') {
+                throw new Error(`Invalid state for answering. Expected 'have-remote-offer', got '${peerConnection.current.signalingState}'.`);
+            }
+
             const answer = await peerConnection.current.createAnswer();
             await peerConnection.current.setLocalDescription(answer);
             console.log(LOG_PREFIX, 'Created answer and set local description.');
