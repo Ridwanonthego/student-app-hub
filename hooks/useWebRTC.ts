@@ -1,4 +1,5 @@
 
+
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Session } from '@supabase/supabase-js';
 import { supabase } from '../supabase/client';
@@ -38,6 +39,7 @@ export const useWebRTC = (session: Session | null, onCallStart?: () => void) => 
     const playRingtone = useCallback(() => {
         if (ringtoneAudioRef.current) {
             console.log(LOG_PREFIX, 'Attempting to play ringtone...');
+            ringtoneAudioRef.current.volume = 1.0;
             ringtoneAudioRef.current.currentTime = 0;
             const playPromise = ringtoneAudioRef.current.play();
             if (playPromise) {
@@ -57,6 +59,7 @@ export const useWebRTC = (session: Session | null, onCallStart?: () => void) => 
     const playRingback = useCallback(() => {
         if (ringbackAudioRef.current) {
             console.log(LOG_PREFIX, 'Attempting to play ringback...');
+            ringbackAudioRef.current.volume = 0.5;
             ringbackAudioRef.current.currentTime = 0;
             const playPromise = ringbackAudioRef.current.play();
             if(playPromise) {
@@ -219,10 +222,6 @@ export const useWebRTC = (session: Session | null, onCallStart?: () => void) => 
             console.log(LOG_PREFIX, 'Got local audio stream for answering.');
             localStream.current = stream;
             stream.getTracks().forEach(track => peerConnection.current!.addTrack(track, stream));
-            
-            if (peerConnection.current.signalingState !== 'have-remote-offer') {
-                throw new Error(`Invalid state for answering. Expected 'have-remote-offer', got '${peerConnection.current.signalingState}'.`);
-            }
 
             const answer = await peerConnection.current.createAnswer();
             await peerConnection.current.setLocalDescription(answer);
