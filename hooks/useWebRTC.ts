@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Session } from '@supabase/supabase-js';
 import { supabase } from '../supabase/client';
@@ -27,6 +28,12 @@ export const useWebRTC = (session: Session | null, onCallStart?: () => void) => 
     const callTimerRef = useRef<number | null>(null);
     const iceCandidatesBuffer = useRef<RTCIceCandidateInit[]>([]);
     const isProcessingCallAction = useRef(false);
+
+    // Use a ref to get the latest callState inside callbacks without causing re-subscriptions
+    const callStateRef = useRef(callState);
+    useEffect(() => {
+        callStateRef.current = callState;
+    }, [callState]);
 
     const playRingtone = useCallback(() => {
         if (ringtoneAudioRef.current) {
@@ -164,7 +171,7 @@ export const useWebRTC = (session: Session | null, onCallStart?: () => void) => 
     }, [cleanupCall, stopRingback, stopRingtone]);
 
     const initiateCall = async (peer: ChatUser) => {
-        if (callState.status !== 'idle' || !session?.user || isProcessingCallAction.current) return;
+        if (callStateRef.current.status !== 'idle' || !session?.user || isProcessingCallAction.current) return;
         isProcessingCallAction.current = true;
         
         console.log(`${LOG_PREFIX} Initiating call to ${peer.username} (${peer.id})`);
@@ -186,23 +193,25 @@ export const useWebRTC = (session: Session | null, onCallStart?: () => void) => 
             await pc.setLocalDescription(offer);
             console.log(LOG_PREFIX, 'Created offer and set local description.');
             
-            sendSignal(peer.id, 'offer', { offer });
+            await sendSignal(peer.id, 'offer', { offer });
             
         } catch (error) {
             console.error(`${LOG_PREFIX} Error initiating call:`, error);
             cleanupCall();
+        } finally {
+            isProcessingCallAction.current = false;
         }
     };
 
     const answerCall = async () => {
-        if (callState.status !== 'incoming' || !peerConnection.current || !callState.peer || isProcessingCallAction.current) {
+        if (callStateRef.current.status !== 'incoming' || !peerConnection.current || !callStateRef.current.peer || isProcessingCallAction.current) {
             if (isProcessingCallAction.current) console.warn(LOG_PREFIX, 'Answer already in progress.');
-            else console.error(`${LOG_PREFIX} Cannot answer call in current state:`, callState.status);
+            else console.error(`${LOG_PREFIX} Cannot answer call in current state:`, callStateRef.current.status);
             return;
         }
         
         isProcessingCallAction.current = true;
-        console.log(`${LOG_PREFIX} Answering call from ${callState.peer.username}.`);
+        console.log(`${LOG_PREFIX} Answering call from ${callStateRef.current.peer.username}.`);
         stopRingtone();
 
         try {
@@ -211,7 +220,6 @@ export const useWebRTC = (session: Session | null, onCallStart?: () => void) => 
             localStream.current = stream;
             stream.getTracks().forEach(track => peerConnection.current!.addTrack(track, stream));
             
-            // Re-check state *after* getting user media, as this is an async step where state could change
             if (peerConnection.current.signalingState !== 'have-remote-offer') {
                 throw new Error(`Invalid state for answering. Expected 'have-remote-offer', got '${peerConnection.current.signalingState}'.`);
             }
@@ -220,17 +228,19 @@ export const useWebRTC = (session: Session | null, onCallStart?: () => void) => 
             await peerConnection.current.setLocalDescription(answer);
             console.log(LOG_PREFIX, 'Created answer and set local description.');
 
-            sendSignal(callState.peer.id, 'answer', { answer });
+            await sendSignal(callStateRef.current.peer.id, 'answer', { answer });
         } catch (error) {
             console.error(`${LOG_PREFIX} Error answering call:`, error);
             cleanupCall();
+        } finally {
+             isProcessingCallAction.current = false;
         }
     };
 
     const hangUp = () => {
         console.log(LOG_PREFIX, 'Hanging up call.');
-        if (callState.peer) {
-            sendSignal(callState.peer.id, 'hang-up', {});
+        if (callStateRef.current.peer) {
+            sendSignal(callStateRef.current.peer.id, 'hang-up', {});
         }
         cleanupCall();
     };
@@ -244,10 +254,12 @@ export const useWebRTC = (session: Session | null, onCallStart?: () => void) => 
         try {
             switch (signal.signal_type) {
                 case 'offer':
-                    if (callState.status !== 'idle') {
-                        console.warn(LOG_PREFIX, 'Ignoring incoming offer, already in a call.');
+                    const currentStatus = callStateRef.current.status;
+                    if (currentStatus !== 'idle' && currentStatus !== 'disconnected') {
+                        console.warn(LOG_PREFIX, `Ignoring incoming offer, current status is '${currentStatus}'.`);
                         return;
                     }
+
                     isProcessingCallAction.current = true;
                     onCallStart?.();
                     const { data: callerProfile } = await (supabase.from('profiles') as any).select('id, username, full_name, avatar_url').eq('id', signal.sender_id).single();
@@ -281,12 +293,15 @@ export const useWebRTC = (session: Session | null, onCallStart?: () => void) => 
                     
                     setCallState({ status: 'incoming', peer: callerProfile as ChatUser });
                     playRingtone();
+                    isProcessingCallAction.current = false;
                     break;
                 
                 case 'answer':
-                    if (peerConnection.current) {
+                    if (peerConnection.current && peerConnection.current.signalingState === 'have-local-offer') {
                         await peerConnection.current.setRemoteDescription(new RTCSessionDescription(signal.payload.answer));
                         console.log(LOG_PREFIX, 'Set remote description from answer.');
+                    } else {
+                         console.warn(LOG_PREFIX, `Ignoring answer, not in have-local-offer state. Current state: ${peerConnection.current?.signalingState}`);
                     }
                     break;
                 
@@ -306,7 +321,7 @@ export const useWebRTC = (session: Session | null, onCallStart?: () => void) => 
         } catch (error) {
             console.error(`${LOG_PREFIX} Error handling signal "${signal.signal_type}":`, error);
         }
-    }, [session?.user, callState.status, createPeerConnection, cleanupCall, playRingtone, onCallStart]);
+    }, [session?.user, createPeerConnection, cleanupCall, playRingtone, onCallStart]);
     
     useEffect(() => {
         if (callState.status === 'connected') {
@@ -319,7 +334,7 @@ export const useWebRTC = (session: Session | null, onCallStart?: () => void) => 
 
     useEffect(() => {
         if (!session?.user?.id) return;
-        const channel = supabase.channel('webrtc_signals')
+        const channel = supabase.channel(`webrtc_signals:${session.user.id}`)
             .on('postgres_changes', {
                 event: 'INSERT',
                 schema: 'public',
